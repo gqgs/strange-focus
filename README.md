@@ -26,15 +26,17 @@ While a session is running or paused, its task is held in focus. You can browse 
 
 The responsive layout uses a domain sidebar on desktop and a horizontal domain picker on mobile. Domain labels, counts, and selected states supplement the colors. Each pending task adds an orbiting dot; the selected task has a larger marker. Up to 60 dots are drawn per attractor to keep large backlogs responsive, while counts always show the full backlog. Curves stay centered when picking tasks. Reduced-motion preferences freeze the dots; background tabs pause animation.
 
-Use the **×** below an attractor to delete it and all its tasks, including completed tasks. A confirmation shows the task count and warns when deletion will end its current focus session. Other attractors and sessions are preserved.
+Use the **⋯** inside an attractor card to open its settings. **Delete…** opens a separate confirmation showing the task count and warning when deletion will end its current focus session. **Keep attractor**, Escape, or clicking outside cancels deletion. Other attractors and sessions are preserved.
 
-Attractor colors are sampled from the task site's `/favicon.ico` when it permits cross-origin reads. Transparent and white pixels are ignored, and the dominant color is darkened when needed for text contrast. Missing icons, CORS restrictions, or offline requests keep the existing palette color. Each attempt is remembered locally, and the color swatch below the attractor lets you override it. The app contacts only the task site's origin, without cookies, referrer, task path, or query string; no favicon proxy or backend is involved. Existing saved tasks remain compatible.
+Attractor colors are sampled from the task site's `/favicon.ico` when it permits cross-origin reads. Transparent and white pixels are ignored. Missing icons, CORS restrictions, or offline requests keep the existing palette color. Each attempt is remembered locally. In attractor settings, choose **Custom color** with the picker or enter a six-digit hex code, then select **Save custom color**. The exact value is stored separately from the automatic color; **Use automatic color** removes the override. Display shades adapt for contrast in each theme. The app contacts only the task site's origin, without cookies, referrer, task path, or query string; no favicon proxy or backend is involved. Existing saved tasks remain compatible.
 
 The app remains entirely static: `index.html`, `favicon.svg`, and `src/` can be served from a GitHub Pages project subdirectory because asset paths are relative. Python is only the local file server, not a deployment dependency.
 
+The **Dark / Light** toggle in the workspace header changes the theme and remembers the choice in browser storage. Before a choice is saved, the app follows the operating system’s theme. The saved theme is applied before the page paints, and switching themes preserves tasks, custom colors, and active timers.
+
 ## Browser storage
 
-Tasks, domain colors, selection, duration settings, and timer state save automatically in `localStorage` under `strange-focus:v1`. Running timers use an absolute deadline, so refreshes and background tabs do not reset them; paused timers retain their remaining time. An expired session restores as finished without starting another session.
+Tasks, domain colors and custom overrides, theme choice, selection, duration settings, and timer state save automatically in `localStorage` under `strange-focus:v1`. Running timers use an absolute deadline, so refreshes and background tabs do not reset them; paused timers retain their remaining time. An expired session restores as finished without starting another session.
 
 Data belongs to this browser profile and origin (including the port). It is not uploaded or synchronized. Clearing the site's browser data removes it. Use one app tab at a time; concurrent tabs do not merge edits.
 

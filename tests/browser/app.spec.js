@@ -206,15 +206,16 @@ test('attractor deletion confirms, removes completed tasks, and ends its session
   await page.getByRole('button', { name: 'Complete b', exact: true }).click();
   await page.getByRole('button', { name: 'Pick a task', exact: true }).click();
   await page.getByRole('button', { name: 'Start focus' }).click();
-  page.once('dialog', dialog => dialog.dismiss());
-  await page.getByRole('button', { name: 'Delete attractor example.com', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings for example.com', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete…', exact: true }).click();
+  await expect(page.locator('#delete-attractor-description')).toContainText('all 2 tasks');
+  await expect(page.locator('#delete-attractor-description')).toContainText('end its current session');
+  await page.getByRole('button', { name: 'Keep attractor', exact: true }).click();
   await expect(page.locator('.attractor-card')).toHaveCount(1);
-  page.once('dialog', async dialog => {
-    expect(dialog.message()).toContain('all 2 tasks');
-    expect(dialog.message()).toContain('end its current session');
-    await dialog.accept();
-  });
-  await page.getByRole('button', { name: 'Delete attractor example.com', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Settings for example.com', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Settings for example.com', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete…', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete attractor', exact: true }).click();
   expect((await saved(page)).timer).toBeNull();
   await page.reload();
   await expect(page.locator('.attractor-card')).toHaveCount(0);
@@ -267,8 +268,72 @@ test('favicon color is extracted, saved, and manually overridable', async ({ pag
   const color = (await saved(page)).attractors[0].color;
   expect(color.slice(3)).toBe('0000');
   await page.reload();
-  await expect(page.getByLabel('Color for example.com')).toHaveValue(color);
-  await page.getByLabel('Color for example.com').fill('#126f60');
+  await page.getByRole('button', { name: 'Settings for example.com', exact: true }).click();
+  await expect(page.getByLabel('Custom color picker')).toHaveValue(color);
+  await page.getByLabel('Hex color', { exact: true }).fill('#126f60');
+  await page.getByRole('button', { name: 'Save custom color' }).click();
   await page.reload();
-  await expect(page.getByLabel('Color for example.com')).toHaveValue('#126f60');
+  await page.getByRole('button', { name: 'Settings for example.com', exact: true }).click();
+  await expect(page.getByLabel('Custom color picker')).toHaveValue('#126f60');
+  await page.getByRole('button', { name: 'Use automatic color' }).click();
+  expect((await saved(page)).attractors[0].color).toBe(color);
+  expect((await saved(page)).attractors[0].customColor).toBeUndefined();
+});
+
+
+test('theme follows system until chosen, then persists without affecting tasks', async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await add(page, 'example.com/theme-test');
+  await page.getByRole('button', { name: 'Pick a task', exact: true }).click();
+  await page.getByRole('button', { name: 'Start focus' }).click();
+  const deadline = (await saved(page)).timer.endAt;
+  await page.getByRole('button', { name: 'Switch to light theme' }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect((await saved(page)).timer.endAt).toBe(deadline);
+  await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.screenshot({ path: testInfo.outputPath('dark-workspace.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('custom color validation, exact persistence, and dialog keyboard behavior', async ({ page }) => {
+  await page.goto('/'); await add(page, 'example.com/colors');
+  const button = page.getByRole('button', { name: 'Settings for example.com', exact: true });
+  await button.focus(); await page.keyboard.press('Enter');
+  await page.getByLabel('Hex color', { exact: true }).fill('oops');
+  await page.getByRole('button', { name: 'Save custom color' }).click();
+  await expect(page.locator('#color-error')).toContainText('six-digit hex');
+  await page.getByLabel('Hex color', { exact: true }).fill('#ffff00');
+  await page.getByRole('button', { name: 'Save custom color' }).click();
+  await expect(button).toBeFocused();
+  expect((await saved(page)).attractors[0].customColor).toBe('#ffff00');
+  await page.reload(); await button.click();
+  await expect(page.getByLabel('Custom color picker')).toHaveValue('#ffff00');
+  await page.keyboard.press('Escape'); await expect(button).toBeFocused();
+  await button.click(); await page.getByRole('button', { name: 'Use automatic color' }).click();
+  expect((await saved(page)).attractors[0].customColor).toBeUndefined();
+});
+
+test('both themes and attractor dialogs meet accessibility checks', async ({ page }, testInfo) => {
+  await page.goto('/'); await add(page, 'example.com/accessibility');
+  await page.getByRole('button', { name: 'Pick a task', exact: true }).click();
+  const check = async () => {
+    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    expect(results.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => ({ target: node.target, summary: node.failureSummary })) }))).toEqual([]);
+  };
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+    await check();
+    await page.getByRole('button', { name: 'Settings for example.com', exact: true }).click();
+    await check();
+    await page.screenshot({ path: testInfo.outputPath(`${theme}-attractor-settings.png`) });
+    await page.getByRole('button', { name: 'Delete…', exact: true }).click();
+    await check();
+    await page.getByRole('button', { name: 'Keep attractor', exact: true }).click();
+  }
 });

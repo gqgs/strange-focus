@@ -5,6 +5,20 @@ import { createStorage, isValidState, STORAGE_KEY } from '../../src/storage.js';
 import { deleteAttractor } from '../../src/model.js';
 import { dominantColor, readableColor } from '../../src/colors.js';
 
+test('theme and raw custom colors round trip without invalidating older saves', () => {
+  const state = workspace();
+  assert.equal(isValidState(state), true);
+  state.theme = 'dark'; state.attractors[0].customColor = '#ffff00';
+  const backend = memoryStorage(); const storage = createStorage(() => backend);
+  storage.save(state);
+  assert.deepEqual(storage.load().state, state);
+  assert.notEqual(readableColor('#000000', 'dark'), '#000000');
+  assert.equal(readableColor('#000000', 'light'), '#000000');
+  state.theme = 'invalid'; assert.equal(isValidState(state), false);
+  state.theme = 'light'; state.attractors[0].customColor = 'url(x)';
+  assert.equal(isValidState(state), false);
+});
+
 test('deleting an attractor removes both task statuses and ends its pinned timer', () => {
   const state = workspace();
   completeTask(state, 'b'); drawTask(state, () => 0); startTimer(state);

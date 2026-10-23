@@ -7,6 +7,7 @@
     <meta name="description" content="A little chaos, a clear next step. Organize your task links into attractors, pick a task, and make time for focus." />
     <title>Strange Focus — Find your flow</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <script src="./src/theme-init.js"></script>
     <link rel="stylesheet" href="./src/styles.css" />
     <script type="module" src="./src/app.js"></script>
   </head>
@@ -28,7 +29,7 @@
         <div class="sidebar-footer"><span class="small-orbit" aria-hidden="true">↗</span><p>A little chaos.<br /><strong>A clear next step.</strong></p></div>
       </aside>
       <main id="main" class="main" tabindex="-1">
-        <header class="topbar"><span class="workspace-label"><span aria-hidden="true">◈</span> Personal workspace</span><span class="local-badge"><span class="status-dot"></span> Saved in this browser</span></header>
+        <header class="topbar"><span class="workspace-label"><span aria-hidden="true">◈</span> Personal workspace</span><div class="topbar-actions"><span class="local-badge"><span class="status-dot"></span> Saved in this browser</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme"><span id="theme-icon" aria-hidden="true">☾</span><span id="theme-label">Dark</span></button></div></header>
         <div id="storage-warning" class="notice warning" role="alert" hidden><span id="storage-message"></span><button id="reset-storage" class="text-button" type="button">Reset saved data</button></div>
         <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow">LESS DECIDING. MORE DOING.</p><h1 id="page-title">Find your flow<span>.</span></h1><p>Choose an attractor. Let chance pick the next step.</p></div><span class="intro-mark" aria-hidden="true">✳</span></section>
         <form id="add-form" class="add-form" novalidate>
@@ -61,6 +62,20 @@
       </main>
     </div>
     <dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form"><div class="dialog-heading"><h2 id="settings-title">Your rhythm</h2><button id="close-settings" class="icon-button" type="button" aria-label="Close settings">×</button></div><p>A little structure for your attention. Changes apply to the next session.</p><label for="focus-minutes">Focus duration <span>minutes</span></label><input id="focus-minutes" type="number" min="1" step="1" required /><label for="break-minutes">Break duration <span>minutes</span></label><input id="break-minutes" type="number" min="1" step="1" required /><p id="settings-error" class="field-error" role="alert"></p><button class="button primary" type="submit">Save durations</button></form></dialog>
+    <dialog id="attractor-settings" aria-labelledby="attractor-settings-title">
+      <div class="dialog-heading"><h2 id="attractor-settings-title">Attractor settings</h2><button id="close-attractor-settings" class="icon-button" type="button" aria-label="Close attractor settings">×</button></div>
+      <p id="attractor-settings-domain" class="settings-domain"></p>
+      <form id="attractor-color-form" novalidate>
+        <label for="custom-color">Custom color</label>
+        <div class="color-fields"><input id="custom-color" type="color" aria-label="Custom color picker" /><div><label class="sr-only" for="custom-color-hex">Hex color</label><input id="custom-color-hex" type="text" placeholder="#7254c8" maxlength="7" spellcheck="false" aria-describedby="color-help color-error" /></div></div>
+        <p id="color-help">Choose a color or enter its hex code. Display shades adapt to keep both themes readable.</p>
+        <p id="color-error" class="field-error" role="alert"></p>
+        <button class="button primary" type="submit">Save custom color</button>
+        <button id="reset-attractor-color" class="text-button" type="button">Use automatic color</button>
+      </form>
+      <div class="attractor-danger"><div><h3>Delete attractor</h3><p id="attractor-delete-summary"></p></div><button id="request-attractor-delete" class="button danger-outline" type="button">Delete…</button></div>
+    </dialog>
+    <dialog id="delete-attractor-dialog" aria-labelledby="delete-attractor-title" aria-describedby="delete-attractor-description"><h2 id="delete-attractor-title">Delete this attractor?</h2><p id="delete-attractor-description"></p><div class="dialog-actions"><button id="cancel-attractor-delete" class="button secondary" type="button" autofocus>Keep attractor</button><button id="confirm-attractor-delete" class="button danger" type="button">Delete attractor</button></div></dialog>
     <div id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="toast" class="toast" aria-hidden="true" hidden></div>
   </body>

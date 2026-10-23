@@ -1,11 +1,15 @@
 // Keep accents readable as text on the pale focus card, including custom colors.
-export function readableColor(hex) {
+export function readableColor(hex, theme = 'light') {
   let rgb = hex.match(/[\da-f]{2}/gi).map(value => parseInt(value, 16));
   const luminance = values => values.map(value => {
     const channel = value / 255;
     return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
   }).reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
-  while (luminance(rgb) > 0.14) rgb = rgb.map(value => Math.floor(value * 0.95));
+  if (theme === 'dark') {
+    while (luminance(rgb) < 0.5) rgb = rgb.map(value => Math.min(255, Math.ceil(value + (255 - value) * 0.08)));
+  } else {
+    while (luminance(rgb) > 0.14) rgb = rgb.map(value => Math.floor(value * 0.95));
+  }
   return '#' + rgb.map(value => value.toString(16).padStart(2, '0')).join('');
 }
 

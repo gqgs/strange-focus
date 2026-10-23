@@ -8,10 +8,12 @@ export function isValidState(state) {
   if (!object(state) || state.version !== VERSION || !Array.isArray(state.attractors) || !Array.isArray(state.tasks)) return false;
   if (!object(state.settings) || !validMinutes(state.settings.focusMinutes) || !validMinutes(state.settings.breakMinutes)) return false;
   if (!['focus', 'break'].includes(state.mode)) return false;
+  if (state.theme !== undefined && !['light', 'dark'].includes(state.theme)) return false;
   const domains = new Set();
   for (const item of state.attractors) {
     if (!object(item) || typeof item.hostname !== 'string' || item.id !== item.hostname || domains.has(item.id) || !/^#[\da-f]{6}$/i.test(item.color)) return false;
     if (item.faviconChecked !== undefined && typeof item.faviconChecked !== 'boolean') return false;
+    if (item.customColor != null && !/^#[\da-f]{6}$/i.test(item.customColor)) return false;
     try { if (normalizeUrl(`https://${item.hostname}`).hostname !== item.hostname) return false; } catch { return false; }
     domains.add(item.id);
   }
