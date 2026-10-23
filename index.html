@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f7fb" />
+    <meta name="description" content="A little chaos, a clear next step. Organize your task links into attractors, pick a task, and make time for focus." />
+    <title>Strange Focus — Find your flow</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <script type="module" src="./src/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Attractors">
+        <a class="brand" href="./" aria-label="Strange Focus home">
+          <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 20C4-4-3 28 13 30C24 32 16 6 28 8C45 10 36 44 20 20ZM20 20C6 3 3 23 12 25C23 29 20 11 28 14C39 18 31 35 20 20"/></svg>
+          <span>strange<span class="brand-light">focus</span><span class="brand-dot">.</span></span>
+        </a>
+        <div class="sidebar-heading"><h2>Your attractors</h2><span id="attractor-count" class="count">0</span></div>
+        <p class="sidebar-intro">Different worlds. One place to focus.</p>
+        <nav id="attractor-list" class="attractor-list" aria-label="Choose an attractor"></nav>
+        <div id="empty-attractors" class="empty-attractors">
+          <div id="sidebar-attractor" aria-hidden="true"></div>
+          <p>It starts with a link.</p><span>Each domain becomes an attractor.<br />Add your first task to make one.</span>
+        </div>
+        <div class="sidebar-footer"><span class="small-orbit" aria-hidden="true">↗</span><p>A little chaos.<br /><strong>A clear next step.</strong></p></div>
+      </aside>
+      <main id="main" class="main" tabindex="-1">
+        <header class="topbar"><span class="workspace-label"><span aria-hidden="true">◈</span> Personal workspace</span><span class="local-badge"><span class="status-dot"></span> Saved in this browser</span></header>
+        <div id="storage-warning" class="notice warning" role="alert" hidden><span id="storage-message"></span><button id="reset-storage" class="text-button" type="button">Reset saved data</button></div>
+        <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow">LESS DECIDING. MORE DOING.</p><h1 id="page-title">Find your flow<span>.</span></h1><p>Choose an attractor. Let chance pick the next step.</p></div><span class="intro-mark" aria-hidden="true">✳</span></section>
+        <form id="add-form" class="add-form" novalidate>
+          <label for="task-url">Add a task</label>
+          <div class="url-row"><span class="link-icon" aria-hidden="true">↗</span><input id="task-url" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a link to something you want to work on…" aria-describedby="url-help url-error" required /><button class="button primary" type="submit"><span aria-hidden="true">+</span> Add task</button></div>
+          <div class="input-footer"><span id="url-help">Any link is a task. Its domain becomes its attractor.</span><span id="url-error" class="field-error" role="alert"></span><button id="reopen-duplicate" class="text-button" type="button" hidden>Reopen task</button></div>
+        </form>
+        <div class="workspace-grid">
+          <section class="focus-card" aria-labelledby="focus-heading">
+            <div class="card-top"><h2 id="focus-heading">Your next focus</h2><span id="focus-tag" class="pill">A moment of possibility</span></div>
+            <div id="focus-art" class="focus-art" aria-hidden="true"></div>
+            <div class="focus-content"><p id="focus-domain" class="eyebrow">LET CHANCE TAKE THE LEAD</p><h3 id="focus-title">Your next focus is waiting.</h3><p id="focus-description">Add a task link, choose its attractor, and find a place to begin.</p><a id="open-task" class="open-task" target="_blank" rel="noopener noreferrer" hidden>Open task <span aria-hidden="true">↗</span></a></div>
+            <div class="focus-actions"><button id="draw-task" class="button primary" type="button" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h2c4 0 5 10 9 10h3M14 12l3 3-3 3M3 15h2c1.5 0 2.6-1.4 3.6-3M11.4 8C12.4 6.4 13.5 5 15 5h2M14 2l3 3-3 3"/></svg><span id="draw-label">Pick a task</span></button><button id="complete-task" class="button secondary" type="button" hidden><span aria-hidden="true">✓</span> Mark done</button></div>
+            <p id="draw-help" class="card-footnote">One small step is all it takes.</p>
+          </section>
+          <section class="timer-card" aria-labelledby="timer-heading">
+            <div class="card-top"><h2 id="timer-heading">Make space to focus</h2><button id="timer-settings" class="icon-button" type="button" aria-label="Timer settings" title="Timer settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg></button></div>
+            <div class="phase-switch" role="group" aria-label="Timer mode"><button id="mode-focus" type="button" aria-pressed="true">Focus</button><button id="mode-break" type="button" aria-pressed="false">Short break</button></div>
+            <div class="timer-face"><svg viewBox="0 0 220 220" aria-hidden="true"><circle class="timer-track" cx="110" cy="110" r="98"/><circle id="timer-ring" class="timer-ring" cx="110" cy="110" r="98" pathLength="100"/></svg><div class="timer-readout"><span id="timer-value" role="timer" aria-label="25 minutes remaining">25:00</span><span id="timer-caption">READY WHEN YOU ARE</span></div></div>
+            <button id="timer-toggle" class="button dark timer-start" type="button" disabled>Start focus <span aria-hidden="true">→</span></button>
+            <button id="timer-end" class="text-button timer-end" type="button" hidden>End session</button><p id="timer-help" class="timer-help">Pick a task to give it your full attention.</p>
+          </section>
+        </div>
+        <section class="tasks-section" aria-labelledby="tasks-heading">
+          <div class="tasks-header"><div><p id="tasks-domain" class="eyebrow">A HOME FOR YOUR TASKS</p><h2 id="tasks-heading">Task collection</h2></div><div class="task-tabs" role="group" aria-label="Task status"><button id="tab-pending" type="button" aria-pressed="true">To do <span id="pending-count">0</span></button><button id="tab-done" type="button" aria-pressed="false">Done <span id="done-count">0</span></button></div></div>
+          <div id="task-list" class="task-list"></div>
+          <div id="empty-tasks" class="empty-tasks"><span class="empty-icon" aria-hidden="true">↗</span><div><h3 id="empty-tasks-title">Turn your open tabs into a starting point.</h3><p id="empty-tasks-description">An article to read, an issue to solve, a document to write. Just add the link.</p></div></div>
+        </section>
+        <footer class="main-footer"><span>Small steps. Strange possibilities.</span><span>No account. Just your browser.</span></footer>
+      </main>
+    </div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form"><div class="dialog-heading"><h2 id="settings-title">Your rhythm</h2><button id="close-settings" class="icon-button" type="button" aria-label="Close settings">×</button></div><p>A little structure for your attention. Changes apply to the next session.</p><label for="focus-minutes">Focus duration <span>minutes</span></label><input id="focus-minutes" type="number" min="1" step="1" required /><label for="break-minutes">Break duration <span>minutes</span></label><input id="break-minutes" type="number" min="1" step="1" required /><p id="settings-error" class="field-error" role="alert"></p><button class="button primary" type="submit">Save durations</button></form></dialog>
+    <div id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="toast" class="toast" aria-hidden="true" hidden></div>
+  </body>
+</html>
