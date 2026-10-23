@@ -106,6 +106,17 @@ export function deleteTask(state, id) {
   return true;
 }
 
+export function deleteAttractor(state, id) {
+  if (!state.attractors.some(item => item.id === id)) return false;
+  const ids = new Set(state.tasks.filter(task => task.attractorId === id).map(task => task.id));
+  if (ids.has(state.timer?.taskId)) state.timer = null;
+  if (ids.has(state.selectedTaskId)) { state.selectedTaskId = null; state.mode = 'focus'; }
+  state.tasks = state.tasks.filter(task => task.attractorId !== id);
+  state.attractors = state.attractors.filter(item => item.id !== id);
+  if (state.selectedAttractorId === id) state.selectedAttractorId = state.attractors[0]?.id ?? null;
+  return true;
+}
+
 export function validMinutes(value) {
   return Number.isSafeInteger(value) && value > 0 && Number.isSafeInteger(value * 60_000 + Date.now());
 }

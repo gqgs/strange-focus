@@ -2,6 +2,43 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addTask, changeMode, completeTask, createState, deleteTask, drawTask, endTimer, formatTime, isSessionActive, normalizeUrl, pauseTimer, remainingTime, reopenTask, resumeTimer, selectAttractor, setSettings, startTimer, tasksFor, tickTimer } from '../../src/model.js';
 import { createStorage, isValidState, STORAGE_KEY } from '../../src/storage.js';
+import { deleteAttractor } from '../../src/model.js';
+import { dominantColor, readableColor } from '../../src/colors.js';
+
+test('deleting an attractor removes both task statuses and ends its pinned timer', () => {
+  const state = workspace();
+  completeTask(state, 'b'); drawTask(state, () => 0); startTimer(state);
+  deleteAttractor(state, 'github.com');
+  assert.deepEqual(state.tasks.map(task => task.id), ['c']);
+  assert.equal(state.timer, null);
+  assert.equal(state.selectedTaskId, null);
+  assert.equal(state.selectedAttractorId, 'docs.google.com');
+  assert.equal(isValidState(state), true);
+  deleteAttractor(state, 'docs.google.com');
+  assert.equal(state.selectedAttractorId, null);
+  assert.equal(isValidState(state), true);
+});
+
+test('deleting an unrelated attractor preserves a running session', () => {
+  const state = workspace(); drawTask(state, () => 0); startTimer(state);
+  const timer = state.timer;
+  selectAttractor(state, 'docs.google.com'); deleteAttractor(state, 'docs.google.com');
+  assert.equal(state.timer, timer);
+  assert.equal(state.selectedTaskId, 'a');
+  assert.equal(isValidState(state), true);
+});
+
+test('favicon extraction ignores transparency and white; accents stay readable', () => {
+  assert.equal(dominantColor(new Uint8ClampedArray([255, 255, 255, 255, 255, 0, 0, 0])), null);
+  const color = dominantColor(new Uint8ClampedArray([255, 255, 255, 255, 255, 0, 0, 255, 255, 0, 0, 255]));
+  assert.match(color, /^#[a-f\d]{6}$/);
+  assert.equal(color.slice(3), '0000');
+  assert.notEqual(readableColor('#ffff00'), '#ffff00');
+  const state = workspace();
+  state.attractors[0].color = color; state.attractors[0].faviconChecked = true;
+  assert.equal(isValidState(state), true);
+  assert.equal(isValidState(workspace()), true);
+});
 
 function workspace() {
   const state = createState();

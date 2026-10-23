@@ -1,5 +1,5 @@
 // The Lorenz system, projected onto its x/z plane. A fixed trajectory gives each
-// domain a recognizable, still shape rather than distracting continuous motion.
+// domain a recognizable shape; pending tasks travel along this trajectory.
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let cachedPoints;
 
@@ -24,7 +24,7 @@ function trajectory() {
   return cachedPoints;
 }
 
-export function createAttractor(color, { detail = false, selected = false } = {}) {
+export function createAttractor(color, { detail = false, tasks = [], selectedTaskId = null } = {}) {
   const points = trajectory();
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 340 190');
@@ -36,13 +36,63 @@ export function createAttractor(color, { detail = false, selected = false } = {}
   path.setAttribute('stroke-width', detail ? '0.65' : '0.9');
   path.setAttribute('stroke-opacity', detail ? '0.48' : '0.64');
   svg.append(path);
-  if (selected) {
-    const [cx, cy] = points[1460];
-    const halo = document.createElementNS(SVG_NS, 'circle');
-    halo.setAttribute('cx', cx); halo.setAttribute('cy', cy); halo.setAttribute('r', '10'); halo.setAttribute('fill', color); halo.setAttribute('fill-opacity', '0.13');
+  const visible = tasks.slice(0, 60);
+  if (selectedTaskId && !visible.some(task => task.id === selectedTaskId)) {
+    const selected = tasks.find(task => task.id === selectedTaskId);
+    if (selected) visible.splice(visible.length - 1, 1, selected);
+  }
+  const dots = visible.map(task => {
     const dot = document.createElementNS(SVG_NS, 'circle');
-    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('r', '4'); dot.setAttribute('fill', color); dot.setAttribute('stroke', '#fff'); dot.setAttribute('stroke-width', '1.5');
-    svg.append(halo, dot);
+    dot.setAttribute('class', 'task-orbit-dot');
+    dot.dataset.taskId = task.id;
+    dot.setAttribute('r', task.id === selectedTaskId ? '5' : '3.2');
+    dot.setAttribute('fill', color);
+    dot.setAttribute('stroke', '#fff');
+    dot.setAttribute('stroke-width', task.id === selectedTaskId ? '2' : '0.8');
+    const offset = [...task.id].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0) / 4294967296;
+    positionDot(dot, points, offset);
+    svg.append(dot);
+    return { dot, offset };
+  });
+  svg.dataset.taskCount = tasks.length;
+  if (dots.length) {
+    moving.add({ svg, points, dots });
+    startMotion();
   }
   return svg;
 }
+
+const moving = new Set();
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let frame = null;
+export function clearAttractorAnimations() {
+  moving.clear();
+  if (frame !== null) cancelAnimationFrame(frame);
+  frame = null;
+}
+function positionDot(dot, points, phase) {
+  const cycle = (phase % 1) * 2;
+  const index = (cycle <= 1 ? cycle : 2 - cycle) * (points.length - 1);
+  const a = points[Math.floor(index)], b = points[Math.min(Math.floor(index) + 1, points.length - 1)];
+  const mix = index % 1;
+  dot.setAttribute('cx', (a[0] + (b[0] - a[0]) * mix).toFixed(2));
+  dot.setAttribute('cy', (a[1] + (b[1] - a[1]) * mix).toFixed(2));
+}
+function animate(time) {
+  frame = null;
+  for (const item of moving) {
+    if (!item.svg.isConnected) { moving.delete(item); continue; }
+    for (const { dot, offset } of item.dots) positionDot(dot, item.points, offset + time / 90000);
+  }
+  startMotion();
+}
+function startMotion() {
+  if (frame === null && moving.size && !document.hidden && !reducedMotion.matches) frame = requestAnimationFrame(animate);
+}
+function syncMotion() {
+  if (frame !== null) cancelAnimationFrame(frame);
+  frame = null;
+  startMotion();
+}
+reducedMotion.addEventListener('change', syncMotion);
+document.addEventListener('visibilitychange', syncMotion);

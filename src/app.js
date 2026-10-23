@@ -1,6 +1,8 @@
 import { PALETTE, addTask, changeMode, completeTask, createState, deleteTask, drawTask, endTimer, formatTime, isSessionActive, pauseTimer, remainingTime, reopenTask, resumeTimer, selectAttractor, setSettings, startTimer, taskLabel, tasksFor, tickTimer } from './model.js';
 import { createStorage } from './storage.js';
-import { createAttractor } from './attractor.js';
+import { createAttractor, clearAttractorAnimations } from './attractor.js';
+import { deleteAttractor } from './model.js';
+import { faviconColor, readableColor } from './colors.js';
 
 const $ = id => document.getElementById(id);
 const storage = createStorage();
@@ -9,6 +11,24 @@ let state = loaded.state;
 let tab = 'pending';
 let duplicateId = null;
 let toastTimeout;
+const colorRequests = new Set();
+
+function scheduleFaviconColors() {
+  for (const attractor of state.attractors) {
+    if (colorRequests.size >= 2) break;
+    if (attractor.faviconChecked || colorRequests.has(attractor)) continue;
+    const task = state.tasks.find(item => item.attractorId === attractor.id);
+    if (!task) continue;
+    colorRequests.add(attractor);
+    faviconColor(task.url).then(color => {
+      if (!state.attractors.includes(attractor) || attractor.faviconChecked) return;
+      attractor.faviconChecked = true;
+      if (color) attractor.color = color;
+      persist();
+      render();
+    }).finally(() => { colorRequests.delete(attractor); scheduleFaviconColors(); });
+  }
+}
 
 function announce(message) {
   $('announcement').textContent = '';
@@ -51,11 +71,26 @@ function renderAttractors() {
     const top = el('span', 'attractor-top');
     top.append(el('span', 'domain-dot'), el('span', 'attractor-domain', attractor.hostname), el('span', 'selected-indicator', selected ? '↗' : ''));
     const art = el('span', 'attractor-art');
-    art.append(createAttractor(attractor.color, { selected }));
+    art.append(createAttractor(attractor.color, { tasks: tasksFor(state, attractor.id), selectedTaskId: state.selectedTaskId }));
     const meta = el('span', 'attractor-meta');
     meta.append(el('span', '', `${tasksFor(state, attractor.id).length} to do`), el('span', '', `${tasksFor(state, attractor.id, 'done').length} done`));
     button.append(top, art, meta);
-    return button;
+    const wrapper = el('div', 'attractor-entry');
+    const controls = el('div', 'attractor-tools');
+    const color = el('input', 'attractor-color');
+    color.type = 'color'; color.value = attractor.color;
+    color.dataset.colorId = attractor.id;
+    color.dataset.focusKey = `color:${attractor.id}`;
+    color.setAttribute('aria-label', `Color for ${attractor.hostname}`);
+    color.title = 'Choose a color (adjusted for readability)';
+    const remove = el('button', 'icon-button', '×');
+    remove.type = 'button'; remove.dataset.deleteAttractorId = attractor.id;
+    remove.dataset.focusKey = `remove-attractor:${attractor.id}`;
+    remove.setAttribute('aria-label', `Delete attractor ${attractor.hostname}`);
+    remove.title = 'Delete attractor and its tasks';
+    controls.append(color, remove);
+    wrapper.append(button, controls);
+    return wrapper;
   });
   $('attractor-list').replaceChildren(...cards);
 }
@@ -67,7 +102,8 @@ function renderFocus() {
   const active = isSessionActive(state);
   document.querySelector('.focus-card').classList.toggle('has-task', Boolean(task));
   document.querySelector('.focus-card').style.setProperty('--focus-color', attractor?.color ?? PALETTE[0]);
-  $('focus-art').replaceChildren(createAttractor(attractor?.color ?? PALETTE[0], { detail: true, selected: Boolean(task) }));
+  const orbitTasks = attractor ? tasksFor(state, attractor.id) : [];
+  $('focus-art').replaceChildren(createAttractor(attractor?.color ?? PALETTE[0], { detail: true, tasks: orbitTasks, selectedTaskId: task?.id }), el('span', 'orbit-caption', orbitTasks.length > 60 ? `60 of ${orbitTasks.length} pending tasks shown` : orbitTasks.length ? 'One dot per pending task' : 'Your tasks will find their orbit here'));
   $('focus-tag').textContent = active ? 'Session in progress' : task ? 'A little serendipity' : attractor ? `${candidates.length} possibilities` : 'A moment of possibility';
   $('focus-domain').textContent = task ? attractor.hostname : attractor ? attractor.hostname : 'LET CHANCE TAKE THE LEAD';
   $('focus-title').textContent = task ? taskLabel(task.url) : candidates.length ? 'One less decision to make.' : attractor ? 'A little breathing room.' : 'Your next focus is waiting.';
@@ -149,11 +185,13 @@ function renderTasks() {
 
 function render() {
   const focused = document.activeElement?.dataset.focusKey;
+  clearAttractorAnimations();
   renderAttractors(); renderFocus(); renderTimer(); renderTasks();
   if (focused) {
     const replacement = [...document.querySelectorAll('[data-focus-key]')].find(node => node.dataset.focusKey === focused);
     (replacement ?? $(tab === 'pending' ? 'tab-pending' : 'tab-done')).focus({ preventScroll: true });
   }
+  scheduleFaviconColors();
 }
 
 $('add-form').addEventListener('submit', event => {
@@ -194,11 +232,30 @@ $('reopen-duplicate').addEventListener('click', () => {
 });
 
 $('attractor-list').addEventListener('click', event => {
+  const remove = event.target.closest('[data-delete-attractor-id]');
+  if (remove) {
+    const id = remove.dataset.deleteAttractorId;
+    const tasks = state.tasks.filter(task => task.attractorId === id);
+    const endsSession = isSessionActive(state) && tasks.some(task => task.id === state.timer.taskId);
+    if (!window.confirm(`Delete ${id} and all ${tasks.length} tasks (including completed tasks)?${endsSession ? ' This will also end its current session.' : ''} This cannot be undone.`)) return;
+    deleteAttractor(state, id);
+    tab = 'pending';
+    commit(`Attractor ${id} deleted.`);
+    (document.querySelector('[data-attractor-id]') ?? $('task-url')).focus();
+    return;
+  }
   const card = event.target.closest('[data-attractor-id]');
   if (!card || card.dataset.attractorId === state.selectedAttractorId) return;
   selectAttractor(state, card.dataset.attractorId);
   tab = 'pending';
   commit();
+});
+$('attractor-list').addEventListener('change', event => {
+  const attractor = state.attractors.find(item => item.id === event.target.dataset.colorId);
+  if (!attractor) return;
+  attractor.color = readableColor(event.target.value);
+  attractor.faviconChecked = true;
+  commit('Attractor color saved.');
 });
 $('draw-task').addEventListener('click', () => { const task = drawTask(state); if (task) commit(`Your next focus: ${taskLabel(task.url)}.`); });
 $('complete-task').addEventListener('click', () => {

@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+test.beforeEach(async ({ page }) => {
+  // Keep tests deterministic and offline. The favicon test supplies a CORS image.
+  await page.route('**/favicon.ico', route => route.abort());
+});
+
 const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('strange-focus:v1')));
 async function add(page, url) {
   await page.getByLabel('Add a task', { exact: true }).fill(url);
@@ -193,4 +198,77 @@ test('accessible empty, populated and settings states', async ({ page }) => {
   await check();
   await page.getByRole('button', { name: 'Timer settings' }).click();
   await check();
+});
+
+test('attractor deletion confirms, removes completed tasks, and ends its session', async ({ page }) => {
+  await page.goto('/');
+  await add(page, 'example.com/a'); await add(page, 'example.com/b');
+  await page.getByRole('button', { name: 'Complete b', exact: true }).click();
+  await page.getByRole('button', { name: 'Pick a task', exact: true }).click();
+  await page.getByRole('button', { name: 'Start focus' }).click();
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'Delete attractor example.com', exact: true }).click();
+  await expect(page.locator('.attractor-card')).toHaveCount(1);
+  page.once('dialog', async dialog => {
+    expect(dialog.message()).toContain('all 2 tasks');
+    expect(dialog.message()).toContain('end its current session');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Delete attractor example.com', exact: true }).click();
+  expect((await saved(page)).timer).toBeNull();
+  await page.reload();
+  await expect(page.locator('.attractor-card')).toHaveCount(0);
+  expect((await saved(page)).tasks).toEqual([]);
+});
+
+test('task dots move, respect reduced motion, and stay centered after selection', async ({ page }) => {
+  await page.goto('/');
+  await add(page, 'example.com/a'); await add(page, 'example.com/b');
+  const art = page.locator('#focus-art');
+  await expect(art.locator('.task-orbit-dot')).toHaveCount(2);
+  const before = await art.boundingBox();
+  const dot = art.locator('.task-orbit-dot').first();
+  const start = await dot.getAttribute('cx');
+  await expect.poll(() => dot.getAttribute('cx')).not.toBe(start);
+  await page.getByRole('button', { name: 'Pick a task', exact: true }).click();
+  const after = await art.boundingBox();
+  expect(after.width).toBe(before.width);
+  expect(after.height).toBe(before.height);
+  const card = await page.locator('.focus-card').boundingBox();
+  expect(Math.abs(after.x + after.width / 2 - card.x - card.width / 2)).toBeLessThan(1);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const stopped = await dot.getAttribute('cx');
+  await page.waitForTimeout(150);
+  expect(await dot.getAttribute('cx')).toBe(stopped);
+  await page.getByRole('button', { name: 'Mark done', exact: true }).click();
+  await expect(art.locator('.task-orbit-dot')).toHaveCount(1);
+});
+
+test('favicon color is extracted, saved, and manually overridable', async ({ page }) => {
+  // Playwright auto-aborts bare /favicon.ico requests before route handlers.
+  // A test-only query allows a real cross-origin image response to be mocked.
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch;
+    window.fetch = (input, options) => {
+      const url = new URL(String(input), location.href);
+      if (url.pathname === '/favicon.ico') url.searchParams.set('playwright-fixture', '1');
+      return originalFetch(url, options);
+    };
+  });
+  await page.goto('/');
+  const icon = await page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 16;
+    const context = canvas.getContext('2d'); context.fillStyle = '#ff0000'; context.fillRect(0, 0, 16, 16);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.route('https://example.com/favicon.ico?playwright-fixture=1', route => route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: Buffer.from(icon, 'base64') }));
+  await add(page, 'https://example.com/private-path?secret=only-in-browser');
+  await expect.poll(async () => (await saved(page)).attractors[0].faviconChecked).toBe(true);
+  const color = (await saved(page)).attractors[0].color;
+  expect(color.slice(3)).toBe('0000');
+  await page.reload();
+  await expect(page.getByLabel('Color for example.com')).toHaveValue(color);
+  await page.getByLabel('Color for example.com').fill('#126f60');
+  await page.reload();
+  await expect(page.getByLabel('Color for example.com')).toHaveValue('#126f60');
 });

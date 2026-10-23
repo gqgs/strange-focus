@@ -1,4 +1,4 @@
-import { createState, normalizeUrl, PALETTE, validMinutes, VERSION } from './model.js';
+import { createState, normalizeUrl, validMinutes, VERSION } from './model.js';
 
 export const STORAGE_KEY = 'strange-focus:v1';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -10,7 +10,8 @@ export function isValidState(state) {
   if (!['focus', 'break'].includes(state.mode)) return false;
   const domains = new Set();
   for (const item of state.attractors) {
-    if (!object(item) || typeof item.hostname !== 'string' || item.id !== item.hostname || domains.has(item.id) || !PALETTE.includes(item.color)) return false;
+    if (!object(item) || typeof item.hostname !== 'string' || item.id !== item.hostname || domains.has(item.id) || !/^#[\da-f]{6}$/i.test(item.color)) return false;
+    if (item.faviconChecked !== undefined && typeof item.faviconChecked !== 'boolean') return false;
     try { if (normalizeUrl(`https://${item.hostname}`).hostname !== item.hostname) return false; } catch { return false; }
     domains.add(item.id);
   }

@@ -2,7 +2,7 @@
 
 A chaos-inspired productivity tool combining attractors, project visualization, stochastic task selection, and Pomodoro focus sessions.
 
-Every task is a URL. Its domain becomes an **attractor**: a little world of related work, represented by a static Lorenz butterfly. Choose a world, let chance choose a task, and give it your attention.
+Every task is a URL. Its domain becomes an **attractor**: a little world of related work, represented by a Lorenz butterfly with orbiting task dots. Choose a world, let chance choose a task, and give it your attention.
 
 ## Run locally
 
@@ -24,7 +24,13 @@ Open **http://127.0.0.1:5173** in a modern browser. `npm run dev` starts the sam
 
 While a session is running or paused, its task is held in focus. You can browse other attractors, but cannot draw another task or delete the active task until the session ends. Completing that task ends its session. Timer expiry does **not** complete tasks or start another timer. Breaks start explicitly.
 
-The responsive layout uses a domain sidebar on desktop and a horizontal domain picker on mobile. Domain labels, counts, and selected states supplement the colors. Attractor curves stay still, and keyboard navigation, focus indicators, screen-reader announcements, and reduced-motion preferences are supported.
+The responsive layout uses a domain sidebar on desktop and a horizontal domain picker on mobile. Domain labels, counts, and selected states supplement the colors. Each pending task adds an orbiting dot; the selected task has a larger marker. Up to 60 dots are drawn per attractor to keep large backlogs responsive, while counts always show the full backlog. Curves stay centered when picking tasks. Reduced-motion preferences freeze the dots; background tabs pause animation.
+
+Use the **×** below an attractor to delete it and all its tasks, including completed tasks. A confirmation shows the task count and warns when deletion will end its current focus session. Other attractors and sessions are preserved.
+
+Attractor colors are sampled from the task site's `/favicon.ico` when it permits cross-origin reads. Transparent and white pixels are ignored, and the dominant color is darkened when needed for text contrast. Missing icons, CORS restrictions, or offline requests keep the existing palette color. Each attempt is remembered locally, and the color swatch below the attractor lets you override it. The app contacts only the task site's origin, without cookies, referrer, task path, or query string; no favicon proxy or backend is involved. Existing saved tasks remain compatible.
+
+The app remains entirely static: `index.html`, `favicon.svg`, and `src/` can be served from a GitHub Pages project subdirectory because asset paths are relative. Python is only the local file server, not a deployment dependency.
 
 ## Browser storage
 
@@ -57,7 +63,8 @@ The Playwright suite starts its own local server and runs desktop (1440px) and t
 - `src/app.js`: DOM rendering and interaction handlers.
 - `src/model.js`: URL rules, task lifecycle, random selection, and timer transitions.
 - `src/storage.js`: versioned persistence, validation, and recovery.
-- `src/attractor.js`: deterministic Lorenz integration and SVG rendering.
+- `src/attractor.js`: Lorenz integration, SVG rendering, and task motion.
+- `src/colors.js`: best-effort favicon sampling and readable accent colors.
 - `tests/`: unit tests and end-to-end browser scenarios.
 
-The MVP is plain HTML, CSS, and JavaScript, with no runtime dependencies or backend. Accounts, synchronization, metadata fetching, weighted selection, notifications, and long-break cycles are outside this version.
+The MVP is plain HTML, CSS, and JavaScript, with no runtime dependencies or backend. Accounts, synchronization, page-title fetching, weighted selection, notifications, and long-break cycles are outside this version.
