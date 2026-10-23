@@ -1,3 +1,3 @@
 # strange-focus
 
-A chaos-inspired productivity tool combining Lorenz attractors, project visualization, stochastic task selection, and Pomodoro focus sessions.
+A chaos-inspired productivity tool combining attractors, project visualization, stochastic task selection, and Pomodoro focus sessions.
