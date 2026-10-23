@@ -29,7 +29,7 @@ function createId() {
 
 export function addTask(state, input, id = createId(), now = Date.now()) {
   const normalized = normalizeUrl(input);
-  const existing = state.tasks.find(task => task.url === normalized.url);
+  const existing = state.tasks.find(task => equivalentUrl(task.url) === equivalentUrl(normalized.url));
   if (existing) return { task: existing, duplicate: true };
   let attractor = state.attractors.find(item => item.hostname === normalized.hostname);
   if (!attractor) {
@@ -62,10 +62,11 @@ export function selectAttractor(state, id) {
 
 export function drawTask(state, random = Math.random) {
   if (isSessionActive(state)) return null;
-  const candidates = tasksFor(state);
+  const candidates = tasksFor(state).filter(task => task.lifecycle !== 'reopened' && !task.capturePending);
   if (!candidates.length) return null;
-  const index = Math.floor(random() * candidates.length);
-  const task = candidates[index];
+  const weights = candidates.map(task => taskWeight(task, state.priorityAlpha ?? 1));
+  let remaining = random() * weights.reduce((sum, weight) => sum + weight, 0);
+  const task = candidates.find((_, index) => (remaining -= weights[index]) < 0) ?? candidates.at(-1);
   state.selectedTaskId = task.id;
   state.timer = null;
   state.mode = 'focus';
@@ -77,6 +78,7 @@ export function completeTask(state, id, now = Date.now()) {
   if (!task || task.status === 'done') return false;
   task.status = 'done';
   task.completedAt = now;
+  if (task.lifecycle) task.lifecycle = 'completed';
   clearTaskSelection(state, id);
   return true;
 }
@@ -94,6 +96,7 @@ export function reopenTask(state, id) {
   if (!task) return false;
   task.status = 'pending';
   task.completedAt = null;
+  if (task.lifecycle) task.lifecycle = 'attracted';
   return true;
 }
 
@@ -184,4 +187,17 @@ export function taskLabel(url) {
   let label = `${parsed.pathname}${parsed.search}${parsed.hash}`;
   try { label = decodeURI(label); } catch { /* A URL can contain a literal percent sign. */ }
   return label.replace(/^\//, '') || parsed.hostname;
+}
+
+// Strip only known tracking parameters; keep fragments, ordering, and content IDs.
+export function equivalentUrl(input) {
+  const url = new URL(normalizeUrl(input).url);
+  for (const key of [...url.searchParams.keys()]) {
+    if (/^utm_/i.test(key) || ['fbclid', 'gclid'].includes(key)) url.searchParams.delete(key);
+  }
+  return url.href;
+}
+
+export function taskWeight(task, alpha = 1) {
+  return 1 + Math.max(0, alpha) * Math.log2(1 + Math.max(0, task.reopenCount ?? 0));
 }

@@ -5,8 +5,9 @@ import { deleteAttractor } from './model.js';
 import { faviconColor, readableColor } from './colors.js';
 
 const $ = id => document.getElementById(id);
-const storage = createStorage();
-const loaded = storage.load();
+const extension = location.protocol === 'chrome-extension:' ? await import('../extension/client.js') : null;
+const storage = extension ? extension.extensionStorage() : createStorage();
+const loaded = await storage.load();
 let state = loaded.state;
 let tab = 'pending';
 let duplicateId = null;
@@ -56,12 +57,13 @@ function announce(message) {
 
 function showStorageIssue(issue) {
   $('storage-warning').hidden = !issue;
+  $('reset-storage').hidden = Boolean(extension);
   $('storage-message').textContent = issue ?? '';
   document.querySelector('.local-badge').classList.toggle('unsaved', Boolean(issue));
   document.querySelector('.local-badge').lastChild.textContent = issue ? ' Temporary session' : ' Saved in this browser';
 }
 
-function persist() { showStorageIssue(storage.save(state)); }
+async function persist() { showStorageIssue(await storage.save(state)); }
 function commit(message) { persist(); render(); if (message) announce(message); }
 
 function el(tag, className, text) {
@@ -106,7 +108,7 @@ function renderAttractors() {
 function renderFocus() {
   const task = state.tasks.find(item => item.id === state.selectedTaskId);
   const attractor = state.attractors.find(item => item.id === (task?.attractorId ?? state.selectedAttractorId));
-  const candidates = tasksFor(state);
+  const candidates = tasksFor(state).filter(task => task.lifecycle !== 'reopened' && !task.capturePending);
   const active = isSessionActive(state);
   document.querySelector('.focus-card').classList.toggle('has-task', Boolean(task));
   document.querySelector('.focus-card').style.setProperty('--focus-color', accentColor(attractor));
@@ -114,14 +116,14 @@ function renderFocus() {
   $('focus-art').replaceChildren(createAttractor(accentColor(attractor), { detail: true, tasks: orbitTasks, selectedTaskId: task?.id }), el('span', 'orbit-caption', orbitTasks.length > 60 ? `60 of ${orbitTasks.length} pending tasks shown` : orbitTasks.length ? 'One dot per pending task' : 'Your tasks will find their orbit here'));
   $('focus-tag').textContent = active ? 'Session in progress' : task ? 'A little serendipity' : attractor ? `${candidates.length} possibilities` : 'A moment of possibility';
   $('focus-domain').textContent = task ? attractor.hostname : attractor ? attractor.hostname : 'LET CHANCE TAKE THE LEAD';
-  $('focus-title').textContent = task ? taskLabel(task.url) : candidates.length ? 'One less decision to make.' : attractor ? 'A little breathing room.' : 'Your next focus is waiting.';
+  $('focus-title').textContent = task ? (task.title || taskLabel(task.url)) : candidates.length ? 'One less decision to make.' : attractor ? 'A little breathing room.' : 'Your next focus is waiting.';
   $('focus-description').textContent = task ? task.url : candidates.length ? 'Pick a task at random. Give one thing your attention.' : attractor ? 'No pending tasks here. Add a link or reopen a completed task.' : 'Add a task link, choose its attractor, and find a place to begin.';
   $('open-task').hidden = !task;
   if (task) $('open-task').href = task.url; else $('open-task').removeAttribute('href');
   $('complete-task').hidden = !task;
   $('draw-task').disabled = active || !candidates.length;
   $('draw-label').textContent = task ? 'Pick again' : 'Pick a task';
-  $('draw-help').textContent = active ? 'End this session before picking another task.' : candidates.length ? `Equal chances. ${candidates.length} pending ${candidates.length === 1 ? 'task' : 'tasks'}. No overthinking.` : 'One small step is all it takes.';
+  $('draw-help').textContent = active ? 'End this session before picking another task.' : candidates.length ? `${extension ? 'Priority-weighted draw.' : 'Equal chances.'} ${candidates.length} pending ${candidates.length === 1 ? 'task' : 'tasks'}. No overthinking.` : 'One small step is all it takes.';
 }
 
 function renderTimer() {
@@ -156,7 +158,7 @@ function renderTasks() {
   $('tab-pending').setAttribute('aria-pressed', String(tab === 'pending'));
   $('tab-done').setAttribute('aria-pressed', String(tab === 'done'));
   const rows = tasks.map(task => {
-    const label = taskLabel(task.url);
+    const label = task.title || taskLabel(task.url);
     const row = el('div', `task-row${task.id === state.selectedTaskId ? ' current' : ''}`);
     row.dataset.taskId = task.id;
     const statusButton = el('button', `task-status icon-button${tab === 'done' ? ' completed' : ''}`, tab === 'done' ? '↶' : '✓');
@@ -172,6 +174,7 @@ function renderTasks() {
     link.dataset.focusKey = `link:${task.id}`;
     text.append(link, el('span', 'task-url', task.url));
     const actions = el('div', 'task-row-actions');
+    if (task.lifecycle === 'reopened') actions.append(el('span', 'current-badge', 'Open in browser'));
     if (task.id === state.selectedTaskId) actions.append(el('span', 'current-badge', 'In focus'));
     const remove = el('button', 'icon-button delete-task');
     remove.type = 'button'; remove.dataset.action = 'delete';
@@ -195,6 +198,11 @@ function render() {
   const focused = document.activeElement?.dataset.focusKey;
   clearAttractorAnimations();
   renderTheme();
+  const collapsed = Boolean(state.sidebarCollapsed);
+  $('sidebar').hidden = collapsed;
+  document.querySelector('.app-shell').classList.toggle('sidebar-collapsed', collapsed);
+  $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
+  $('sidebar-toggle').textContent = collapsed ? 'Show attractors' : 'Hide attractors';
   renderAttractors(); renderFocus(); renderTimer(); renderTasks();
   if (focused) {
     const replacement = [...document.querySelectorAll('[data-focus-key]')].find(node => node.dataset.focusKey === focused);
@@ -377,3 +385,24 @@ if (expired) announce('Your previous session has finished. No new timer was star
 window.setInterval(updateClock, 250);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) updateClock(); });
 window.addEventListener('pageshow', updateClock);
+
+$('sidebar-toggle').addEventListener('click', () => { state.sidebarCollapsed = !state.sidebarCollapsed; commit(); });
+$('export-data').addEventListener('click', async () => {
+  try {
+    const data = extension ? await storage.document() : state;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'strange-focus-backup.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) { announce(error.message); }
+});
+if (extension) {
+  storage.subscribe(next => { state = next; render(); });
+  document.addEventListener('click', event => {
+    const link = event.target.closest('#open-task, .task-link');
+    if (!link) return;
+    event.preventDefault();
+    const id = link.id === 'open-task' ? state.selectedTaskId : link.closest('[data-task-id]').dataset.taskId;
+    storage.open(id).catch(error => announce(error.message));
+  });
+  extension.mountControls(storage, announce).catch(error => announce(error.message));
+}

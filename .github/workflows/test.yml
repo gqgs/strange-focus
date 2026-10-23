@@ -1,0 +1,31 @@
+name: Test web app and extension
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Use Playwright Chromium
+        run: node --input-type=module -e 'import { chromium } from "@playwright/test"; import fs from "node:fs"; fs.appendFileSync(process.env.GITHUB_ENV, `CHROMIUM_PATH=${chromium.executablePath()}\n`);'
+      - run: npm test
+      - run: npm run test:e2e
+      - run: npm run test:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strange-focus-extension
+          path: dist/extension

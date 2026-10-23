@@ -14,7 +14,7 @@
   <body>
     <a class="skip-link" href="#main">Skip to workspace</a>
     <div class="app-shell">
-      <aside class="sidebar" aria-label="Attractors">
+      <aside id="sidebar" class="sidebar" aria-label="Attractors">
         <a class="brand" href="./" aria-label="Strange Focus home">
           <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 20C4-4-3 28 13 30C24 32 16 6 28 8C45 10 36 44 20 20ZM20 20C6 3 3 23 12 25C23 29 20 11 28 14C39 18 31 35 20 20"/></svg>
           <span>strange<span class="brand-light">focus</span><span class="brand-dot">.</span></span>
@@ -29,7 +29,7 @@
         <div class="sidebar-footer"><span class="small-orbit" aria-hidden="true">↗</span><p>A little chaos.<br /><strong>A clear next step.</strong></p></div>
       </aside>
       <main id="main" class="main" tabindex="-1">
-        <header class="topbar"><span class="workspace-label"><span aria-hidden="true">◈</span> Personal workspace</span><div class="topbar-actions"><span class="local-badge"><span class="status-dot"></span> Saved in this browser</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme"><span id="theme-icon" aria-hidden="true">☾</span><span id="theme-label">Dark</span></button></div></header>
+        <header class="topbar"><button id="sidebar-toggle" class="theme-toggle" type="button" aria-controls="sidebar" aria-expanded="true">Hide attractors</button><span class="workspace-label"><span aria-hidden="true">◈</span> Personal workspace</span><div class="topbar-actions"><span class="local-badge"><span class="status-dot"></span> Saved in this browser</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme"><span id="theme-icon" aria-hidden="true">☾</span><span id="theme-label">Dark</span></button></div></header>
         <div id="storage-warning" class="notice warning" role="alert" hidden><span id="storage-message"></span><button id="reset-storage" class="text-button" type="button">Reset saved data</button></div>
         <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow">LESS DECIDING. MORE DOING.</p><h1 id="page-title">Find your flow<span>.</span></h1><p>Choose an attractor. Let chance pick the next step.</p></div><span class="intro-mark" aria-hidden="true">✳</span></section>
         <form id="add-form" class="add-form" novalidate>
@@ -58,7 +58,7 @@
           <div id="task-list" class="task-list"></div>
           <div id="empty-tasks" class="empty-tasks"><span class="empty-icon" aria-hidden="true">↗</span><div><h3 id="empty-tasks-title">Turn your open tabs into a starting point.</h3><p id="empty-tasks-description">An article to read, an issue to solve, a document to write. Just add the link.</p></div></div>
         </section>
-        <footer class="main-footer"><span>Small steps. Strange possibilities.</span><span>No account. Just your browser.</span></footer>
+        <section id="extension-controls" hidden></section><footer class="main-footer"><span>Small steps. Strange possibilities.</span><span><button id="export-data" class="text-button" type="button">Export data</button> · No account. Just your browser.</span></footer>
       </main>
     </div>
     <dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form"><div class="dialog-heading"><h2 id="settings-title">Your rhythm</h2><button id="close-settings" class="icon-button" type="button" aria-label="Close settings">×</button></div><p>A little structure for your attention. Changes apply to the next session.</p><label for="focus-minutes">Focus duration <span>minutes</span></label><input id="focus-minutes" type="number" min="1" step="1" required /><label for="break-minutes">Break duration <span>minutes</span></label><input id="break-minutes" type="number" min="1" step="1" required /><p id="settings-error" class="field-error" role="alert"></p><button class="button primary" type="submit">Save durations</button></form></dialog>

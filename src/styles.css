@@ -358,3 +358,17 @@ dialog .button { width: 100%; margin-top: 12px; }
   .attractor-top { padding-right: 24px; }
   .dialog-heading h2 { font-size: 21px; }
 }
+
+/* The workspace retains its full width when the attractor panel is tucked away. */
+.app-shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+#sidebar-toggle { flex-shrink: 0; }
+#timer-caption { font-size: 9px; letter-spacing: .8px; }
+.monitor-panel { margin-top: 28px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.monitor-panel summary { cursor: pointer; font-weight: 600; min-height: 30px; }
+.monitor-panel p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 12px 0; }
+.monitor-panel label { display: block; margin: 16px 0 8px; font-size: 13px; }
+.monitor-panel input:not([type="checkbox"]), .monitor-panel textarea { display: block; width: 100%; max-width: 480px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: var(--surface); font: inherit; }
+.monitor-panel input[type="checkbox"] { width: 18px; height: 18px; vertical-align: middle; }
+.monitor-panel h3 { margin-top: 24px; font-size: 15px; }
+#recent-tabs { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; margin-top: 12px; }
+#recent-tabs button { text-align: left; overflow-wrap: anywhere; }

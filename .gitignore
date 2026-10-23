@@ -2,3 +2,5 @@ node_modules/
 test-results/
 playwright-report/
 __pycache__/
+dist/
+extension-test-results/

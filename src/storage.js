@@ -9,6 +9,8 @@ export function isValidState(state) {
   if (!object(state.settings) || !validMinutes(state.settings.focusMinutes) || !validMinutes(state.settings.breakMinutes)) return false;
   if (!['focus', 'break'].includes(state.mode)) return false;
   if (state.theme !== undefined && !['light', 'dark'].includes(state.theme)) return false;
+  if (state.sidebarCollapsed !== undefined && typeof state.sidebarCollapsed !== 'boolean') return false;
+  if (state.priorityAlpha !== undefined && (!Number.isFinite(state.priorityAlpha) || state.priorityAlpha < 0 || state.priorityAlpha > 100)) return false;
   const domains = new Set();
   for (const item of state.attractors) {
     if (!object(item) || typeof item.hostname !== 'string' || item.id !== item.hostname || domains.has(item.id) || !/^#[\da-f]{6}$/i.test(item.color)) return false;
@@ -22,6 +24,13 @@ export function isValidState(state) {
   for (const task of state.tasks) {
     if (!object(task) || typeof task.id !== 'string' || !task.id || ids.has(task.id) || typeof task.url !== 'string' || urls.has(task.url) || !domains.has(task.attractorId)) return false;
     if (!['pending', 'done'].includes(task.status) || !timestamp(task.createdAt)) return false;
+    if (task.lifecycle !== undefined && !['attracted', 'reopened', 'completed'].includes(task.lifecycle)) return false;
+    if (task.capturePending !== undefined && typeof task.capturePending !== 'boolean') return false;
+    if (task.lifecycle && ((task.status === 'done') !== (task.lifecycle === 'completed'))) return false;
+    if (task.reopenCount !== undefined && (!Number.isSafeInteger(task.reopenCount) || task.reopenCount < 0)) return false;
+    if (task.history !== undefined && (!Array.isArray(task.history) || task.history.some(event => !object(event) || !timestamp(event.at) || typeof event.type !== 'string'))) return false;
+    if (task.title !== undefined && typeof task.title !== 'string') return false;
+    if (task.favIconUrl !== undefined && typeof task.favIconUrl !== 'string') return false;
     if (task.status === 'pending' ? task.completedAt !== null : !timestamp(task.completedAt)) return false;
     try {
       const normalized = normalizeUrl(task.url);

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "python3 -m http.server 5173 --bind 127.0.0.1",
     "test": "node --test tests/unit/*.test.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:extension": "node scripts/package-extension.mjs",
+    "test:extension": "npm run build:extension && playwright test --config playwright.extension.config.js"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

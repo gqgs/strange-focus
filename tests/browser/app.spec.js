@@ -337,3 +337,18 @@ test('both themes and attractor dialogs meet accessibility checks', async ({ pag
     await page.getByRole('button', { name: 'Keep attractor', exact: true }).click();
   }
 });
+
+test('sidebar collapses, persists after reload and restores keyboard access', async ({ page }) => {
+  await page.goto('/');
+  await add(page, 'https://example.com/read');
+  const toggle = page.getByRole('button', { name: 'Hide attractors' });
+  await toggle.click();
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Show attractors' })).toHaveAttribute('aria-expanded', 'false');
+  await page.reload();
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await page.getByRole('button', { name: 'Show attractors' }).click();
+  await expect(page.locator('#sidebar')).toBeVisible();
+  await expect(page.locator('.attractor-card')).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

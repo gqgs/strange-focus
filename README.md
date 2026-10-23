@@ -78,3 +78,21 @@ The Playwright suite starts its own local server and runs desktop (1440px) and t
 - `tests/`: unit tests and end-to-end browser scenarios.
 
 The MVP is plain HTML, CSS, and JavaScript, with no runtime dependencies or backend. Accounts, synchronization, page-title fetching, weighted selection, notifications, and long-break cycles are outside this version.
+
+## Chromium / Brave extension
+
+Build the unpacked extension with `npm run build:extension` (Node.js only; no dependency installation needed for packaging). In `chrome://extensions` or `brave://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `dist/extension`. Click the extension's toolbar action to open the existing workspace. Reload the extension after rebuilding it. This is an unpacked extension, not a Chrome Web Store release.
+
+Open **Tab attraction settings** beneath the task collection. Monitoring starts **paused, with no domains**. Enter exact hostnames such as `news.ycombinator.com`, `arxiv.org`, `en.wikipedia.org`, `www.youtube.com`, or `chatgpt.com`; subdomains must be listed individually. Save to grant optional access to those sites, choose an inactivity threshold (default 60 minutes), and uncheck **Pause automatic attraction** when ready. Checks use Manifest V3 alarms every minute, so capture may occur up to a minute after the threshold, or later while the browser is asleep.
+
+The extension records observed tab URLs, titles, favicons, and activity timestamps in `chrome.storage.local`. After inactivity, it persists the task **before** navigating away. Only after a successful native navigation to its own saved-task landing page can it remove the tab. Chromium's unload confirmation is never automatically accepted. Active tabs in every window, pinned or audible tabs, loading tabs, edited form fields, contenteditable editors, and pages containing frames are kept open. Missing site permissions or an unsuccessful safety check also keep the tab open. This deliberately conservative policy means some sites, including editor-heavy ChatGPT pages, may need manual task creation. Extensions cannot guarantee detection of arbitrary application-internal unsaved state; native unload warnings and visible form checks are the protection available here.
+
+**Recently attracted** offers restore buttons. Opening a pending task removes it from the random pool while an equivalent URL is open. Closing it or leaving that URL queues it again; subsequent inactivity can attract it again. Only **Mark done** completes a task. Reopening counts and event history persist across cycles. Observed tabs that disappear during a crash or navigation become saved tasks; restored tab IDs are reconciled by URL. If a storage write fails, automatic closing stops and the original tab stays available.
+
+Random selection uses `weight = 1 + alpha × log2(1 + reopeningCount)`, divided by the sum of eligible task weights. The default priority strength is 1; choose 0 for uniform selection. Open tasks are excluded. Known tracking parameters (`utm_*`, `fbclid`, `gclid`) are ignored for deduplication, while the original navigable URL, content parameters, and fragments are retained.
+
+To migrate from GitHub Pages, click **Export data** in the web app, then choose that JSON file under **Import existing tasks** in the extension. Imports add missing tasks without replacing existing tasks or custom colors. Theme and timer durations are copied only into an empty collection; a running timer is not imported. The extension uses a version-2 storage envelope containing the compatible workspace schema. Export also provides an extension backup; importing one restores its tasks, not monitoring permissions or open browser tabs. There is no backend or cloud synchronization, and the web app continues to work independently.
+
+The sidebar's **Hide attractors / Show attractors** button remembers its state on desktop and mobile. The timer's readiness caption uses smaller type.
+
+Run `npm run test:extension` after installing development dependencies to test an unpacked extension in Chromium. The tests cover real capture/restoration, form and unload protection, opt-in configuration, alarms, and service-worker restarts. Unit tests cover failed writes, URL deduplication, recovery, concurrent edits, imports, and deterministic statistical checks of weighted sampling.
