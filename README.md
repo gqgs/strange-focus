@@ -4,6 +4,14 @@ A chaos-inspired productivity tool combining attractors, project visualization, 
 
 Every task is a URL. Its domain becomes an **attractor**: a little world of related work, represented by a Lorenz butterfly with orbiting task dots. Choose a world, let chance choose a task, and give it your attention.
 
+**Use the app:** https://gqgs.github.io/strange-focus/
+
+## Deployment
+
+GitHub Pages publishes automatically on pushes to `main` through `.github/workflows/pages.yml`. The workflow runs unit tests and uploads only `index.html`, `favicon.svg`, and `src/`. No backend or build step is required. It can also be run manually from GitHub Actions. The repository's Pages source is **GitHub Actions**.
+
+Browser data is specific to the site's origin: tasks saved on localhost do not automatically appear on the hosted app.
+
 ## Run locally
 
 No build or dependency installation is needed to use the app. With Python 3 installed, run:
