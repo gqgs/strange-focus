@@ -17,6 +17,7 @@ function fixture() {
     permissions: { contains: async () => true },
     runtime: { getURL: path => `chrome-extension://test/${path}` }, windows: { update: async () => {} },
   };
+  api.tabs.discard = async id => { actions.push('discard'); Object.assign(tabs.get(id), { discarded: true, status: 'unloaded' }); return tabs.get(id); };
   return { engine: new Engine(api), api, tabs, actions, saved: () => saved, fail: () => { fail = true; } };
 }
 test('capture persists before navigation; only the saved landing page is removed, survives new engine', async () => {
@@ -164,7 +165,7 @@ test('explicit bypass persists before direct close and does not inspect or navig
   let requestedOrigins;
   f.api.permissions.contains = async access => { requestedOrigins = access.origins; return true; };
   await f.engine.scan();
-  assert.deepEqual(f.actions, ['save', 'save', 'remove', 'save']);
+  assert.deepEqual(f.actions, ['save', 'save', 'discard', 'remove', 'save']);
   assert.deepEqual(requestedOrigins, ['https://example.com/*']);
   assert.equal(f.tabs.size, 0);
   assert.equal(f.saved().workspace.tasks.length, 1);
@@ -211,12 +212,18 @@ test('bypass cannot close after a failed capture write or a late activation/URL 
   }
 });
 
-test('bypass removal failure retains durable task and original tab', async () => {
+test('bypass removal failure retains the durable task and can retry its discarded tab', async () => {
   const f = fixture(); f.saved().monitor.bypassPageSafety = true;
+  const remove = f.api.tabs.remove;
   f.api.tabs.remove = async () => { throw Error('cannot remove'); };
   await assert.rejects(f.engine.scan(), /cannot remove/);
   assert.equal(f.saved().workspace.tasks.length, 1); assert.equal(f.tabs.size, 1);
   assert.equal(f.saved().workspace.tasks[0].capturePending, true);
+  assert.equal(f.tabs.get(1).discarded, true);
+  f.api.tabs.remove = remove;
+  await new Engine(f.api).scan();
+  assert.equal(f.tabs.size, 0); assert.equal(f.saved().workspace.tasks.length, 1);
+  assert.equal(f.actions.filter(action => action === 'discard').length, 1);
 });
 
 test('a failed receipt write after bypass close is reconciled without losing the task', async () => {
@@ -250,4 +257,23 @@ test('bypass removes a prior unload cooldown but not inactivity', async () => {
   const f = fixture(); f.saved().monitor.bypassPageSafety = true;
   f.saved().candidates[1].blockedAt = Date.now();
   await f.engine.scan(); assert.equal(f.tabs.size, 0);
+});
+
+test('bypass leaves the saved task and tab if discard fails or the tab changes after discarding', async () => {
+  for (const change of ['discard-failure', 'active', 'pinned', 'audible', 'url', 'reload']) {
+    const f = fixture(); f.saved().monitor.bypassPageSafety = true;
+    f.api.tabs.discard = async id => {
+      f.actions.push('discard');
+      if (change === 'discard-failure') throw Error('cannot discard');
+      const tab = f.tabs.get(id); Object.assign(tab, { discarded: true, status: 'unloaded' });
+      if (['active', 'pinned', 'audible'].includes(change)) tab[change] = true;
+      if (change === 'url') tab.url = 'https://example.com/new';
+      if (change === 'reload') { tab.discarded = false; tab.status = 'loading'; }
+      return tab;
+    };
+    await f.engine.scan();
+    assert.equal(f.tabs.size, 1); assert.equal(f.saved().workspace.tasks.length, 1);
+    assert.ok(!f.actions.includes('remove'));
+    assert.equal(f.saved().candidates[1].skipReason, change === 'discard-failure' ? 'discard-failed' : 'page-changed');
+  }
 });

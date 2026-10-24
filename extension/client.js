@@ -53,7 +53,7 @@ export async function mountControls(storage, announce) {
     <label for="monitor-alpha">Reopening priority strength</label><input id="monitor-alpha" type="number" min="0" max="100" step="0.1" required><p>Default 1. Set to 0 for equal chances.</p>
     <label class="check-label"><input id="monitor-paused" type="checkbox"> Pause automatic attraction</label>
     <label class="check-label"><input id="monitor-bypass" type="checkbox" aria-describedby="monitor-bypass-warning"> Bypass page-safety checks for all monitored sites</label>
-    <p id="monitor-bypass-warning">Off by default. When enabled, pages with edited forms, editors, or embedded content close directly without unload warnings. Unsaved progress can be lost. Domain opt-in, inactivity, active/pinned/audible/loading tab protection, and saving tasks before closing still apply.</p>
+    <p id="monitor-bypass-warning">Off by default. When enabled, pages with edited forms, editors, or embedded content are discarded and closed without unload warnings. Unsaved progress can be lost. Domain opt-in, inactivity, active/pinned/audible/loading tab protection, and saving tasks before discarding or closing still apply.</p>
     <button class="button primary" type="submit">Save monitoring settings</button><p id="monitor-message" role="status"></p></form>
     <h3>Current tab status</h3><p>Why observed tabs are waiting or being kept open. Updates after each check; showing up to 50 tabs.</p><div id="capture-status"></div>
     <h3>Recently attracted</h3><div id="recent-tabs"></div>
@@ -77,6 +77,7 @@ export async function mountControls(storage, announce) {
       'page-changed': 'Page or tab activity changed during the check.', frames: 'Embedded frame detected.', editor: 'Editable content detected.',
       'edited-form': 'Form controls differ from their defaults.', 'safety-check': 'Page safety could not be verified.',
       'site-access': 'Site access is unavailable, or the page could not be inspected.',
+      'discard-failed': 'The browser could not discard this page for safety bypass; the saved task and tab were kept.',
     };
     $('capture-status').replaceChildren();
     const candidates = Object.values(doc.candidates).slice(0, 50);
