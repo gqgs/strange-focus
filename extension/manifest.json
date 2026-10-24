@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Strange Focus",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minimum_chrome_version": "121",
   "description": "Keep reading intentions locally, attract inactive tabs, and return to focus.",
   "permissions": ["storage", "tabs", "alarms", "scripting"],
@@ -10,3 +10,4 @@
   "action": { "default_title": "Open Strange Focus" },
   "options_page": "index.html"
 }
+

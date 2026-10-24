@@ -1,4 +1,4 @@
-import { initial, validate, validateMonitor, monitored, protectedTab, attract, history, mergeWorkspace, importWorkspace, KEY } from './state.js';
+import { initial, validate, validateMonitor, monitored, protectedTab, tabProtectionReason, attract, history, mergeWorkspace, importWorkspace, KEY } from './state.js';
 import { equivalentUrl, isSessionActive } from '../src/model.js';
 import { safeToLeave } from './safety.js';
 
@@ -73,39 +73,70 @@ export class Engine {
       if (task.lifecycle === 'reopened' && !open.has(task.id)) { task.lifecycle = 'attracted'; history(task, 're-attracted', now); }
     }
     // Discovery is durable even when paused, and before any tab operation.
-    await this.save(doc);
-    if (doc.monitor.paused) return doc;
     for (const candidate of Object.values(doc.candidates)) {
       const tab = tabs.find(item => item.id === candidate.tabId);
-      if (!tab || !monitored(tab, doc.monitor) || protectedTab(tab) || candidate.gate) continue;
-      if (now - candidate.lastActive < doc.monitor.minutes * 60000 || (candidate.blockedAt && now - candidate.blockedAt < 3600000)) continue;
       const existing = doc.workspace.tasks.find(task => equivalentUrl(task.url) === equivalentUrl(candidate.url));
-      if (existing?.status === 'done' || (isSessionActive(doc.workspace) && existing?.id === doc.workspace.timer.taskId)) continue;
-      let result;
+      candidate.skipReason = doc.monitor.paused ? 'paused'
+        : !tab ? 'page-changed'
+        : tabProtectionReason(tab) || (candidate.gate ? 'capture-pending'
+          : !monitored(tab, doc.monitor) ? 'not-monitored'
+          : now - candidate.lastActive < doc.monitor.minutes * 60000 ? 'inactivity'
+          : !doc.monitor.bypassPageSafety && candidate.blockedAt && now - candidate.blockedAt < 3600000 ? 'unload-cooldown'
+          : existing?.status === 'done' ? 'completed'
+          : isSessionActive(doc.workspace) && existing?.id === doc.workspace.timer.taskId ? 'focus-session'
+          : 'checking');
+    }
+    await this.save(doc);
+    if (doc.monitor.paused) return doc;
+    let statusChanged = false;
+    const skip = (candidate, reason) => { candidate.skipReason = reason; statusChanged = true; };
+    for (const candidate of Object.values(doc.candidates)) {
+      const tab = tabs.find(item => item.id === candidate.tabId);
+      if (candidate.skipReason !== 'checking') continue;
       try {
-        result = await this.api.scripting.executeScript({ target: { tabId: tab.id }, func: safeToLeave, args: [candidate.url] });
-      } catch { continue; } // No host access or the page disappeared: keep it.
+        if (doc.monitor.bypassPageSafety) {
+          // Revoked site access is still respected even without DOM inspection.
+          const url = new URL(candidate.url);
+          if (!await this.api.permissions.contains({ origins: [`${url.protocol}//${url.hostname}/*`] })) { skip(candidate, 'site-access'); continue; }
+        } else {
+          const result = await this.api.scripting.executeScript({ target: { tabId: tab.id }, func: safeToLeave, args: [candidate.url] });
+          const unsafe = result.find(frame => frame.result !== true);
+          if (!result.length || unsafe) {
+            skip(candidate, ['page-changed', 'frames', 'editor', 'edited-form'].includes(unsafe?.result) ? unsafe.result : 'safety-check');
+            continue;
+          }
+        }
+      } catch { skip(candidate, 'site-access'); continue; } // No host access or page disappeared: keep it.
       try {
-        if (!result.length || result.some(frame => frame.result !== true)) continue;
         const fresh = await this.api.tabs.get(tab.id);
-        if (fresh.url !== candidate.url || protectedTab(fresh)) continue;
+        if (fresh.url !== candidate.url || protectedTab(fresh)) { skip(candidate, 'page-changed'); continue; }
         const task = attract(doc, candidate, now);
         if (!task) continue;
-        candidate.gate = this.api.runtime.getURL(`extension/parked.html#${crypto.randomUUID()}`);
+        if (!doc.monitor.bypassPageSafety) candidate.gate = this.api.runtime.getURL(`extension/parked.html#${crypto.randomUUID()}`);
+        candidate.skipReason = 'capture-pending';
         // Keep it out of the draw pool until the original document is gone.
         task.capturePending = true;
         await this.save(doc);
-        // Navigation, rather than tabs.remove on a live page, lets Chromium
-        // run its native beforeunload protocol. Never accept/dismiss a prompt.
+        // In safe mode navigation lets Chromium run beforeunload. Never
+        // accept/dismiss a prompt. Explicit bypass instead closes directly.
         const beforeNavigation = await this.api.tabs.get(tab.id);
-        if (beforeNavigation.url !== candidate.url || protectedTab(beforeNavigation)) continue;
-        await this.api.tabs.update(tab.id, { url: candidate.gate });
+        if (beforeNavigation.url !== candidate.url || protectedTab(beforeNavigation)) { skip(candidate, 'page-changed'); continue; }
+        if (doc.monitor.bypassPageSafety) {
+          // Explicit opt-out: close directly, bypassing native unload warnings.
+          // The task is durable before this call, including if removal fails.
+          await this.api.tabs.remove(tab.id);
+          delete task.capturePending;
+          delete doc.candidates[tab.id];
+          doc.recent = [{ taskId: task.id, at: now }, ...doc.recent.filter(item => item.taskId !== task.id)].slice(0, 50);
+          await this.save(doc);
+        } else await this.api.tabs.update(tab.id, { url: candidate.gate });
       } catch (error) {
         // A failed storage write stops the entire scan before any further close.
         // Navigation failures retain the task and original tab for recovery.
         throw error;
       }
     }
+    if (statusChanged) await this.save(doc);
     return doc;
   }
   async command(message) {
@@ -148,3 +179,4 @@ export class Engine {
     return doc;
   }
 }
+
