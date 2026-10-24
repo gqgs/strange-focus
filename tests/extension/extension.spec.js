@@ -23,7 +23,7 @@ test.beforeEach(async () => {
   await cp('dist/extension', extension, { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(extension, 'manifest.json')));
   // Test-only grant: production requests exact domains from a user gesture.
-  manifest.host_permissions = ['http://127.0.0.1/*', 'https://127.0.0.1/*'];
+  manifest.host_permissions = ['http://127.0.0.1/*', 'https://127.0.0.1/*', 'https://en.wikipedia.org/*'];
   await writeFile(path.join(extension, 'manifest.json'), JSON.stringify(manifest));
   server = createServer((req, res) => {
     res.setHeader('content-type', 'text/html');
@@ -85,14 +85,19 @@ test('monitoring controls persist opt-in configuration and global pause', async 
   await ui.getByLabel('Monitored domains (one per line)').fill('127.0.0.1');
   await ui.getByLabel('Attract after inactivity (minutes)').fill('3');
   await ui.getByLabel('Pause automatic attraction').uncheck();
+  await expect(ui.getByLabel('Bypass page-safety checks for all monitored sites', { exact: true })).not.toBeChecked();
+  await expect(ui.locator('#monitor-bypass-warning')).toContainText('without unload warnings');
+  await ui.getByLabel('Bypass page-safety checks for all monitored sites', { exact: true }).check();
   await ui.getByRole('button', { name: 'Save monitoring settings' }).click();
   await expect(ui.locator('#monitor-message')).toHaveText('Saved. Checks run every minute.');
   const doc = await command({ type: 'get' }); expect(doc.monitor.paused).toBe(false); expect(doc.monitor.minutes).toBe(3);
+  expect(doc.monitor.bypassPageSafety).toBe(true);
   await ui.getByLabel('Pause automatic attraction').check();
   await ui.getByRole('button', { name: 'Save monitoring settings' }).click();
   await expect.poll(async () => (await command({ type: 'get' })).monitor.paused).toBe(true);
   await ui.reload(); await ui.getByText('Tab attraction settings', { exact: true }).click();
   await expect(ui.getByLabel('Pause automatic attraction')).toBeChecked();
+  await expect(ui.getByLabel('Bypass page-safety checks for all monitored sites', { exact: true })).toBeChecked();
   await expect(ui.getByLabel('Attract after inactivity (minutes)')).toHaveValue('3');
   await ui.screenshot({ path: test.info().outputPath('extension-settings.png'), fullPage: true });
 });
@@ -144,4 +149,71 @@ test('JSON file import migrates tasks, theme and colors into an empty collection
   await ui.getByLabel('Choose a Strange Focus export').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await expect(ui.locator('#toast')).toContainText('Tasks imported');
   expect((await command({ type: 'get' })).workspace.tasks).toHaveLength(1);
+});
+
+
+// Deterministic Vector-like fixture: no requests to the live Wikipedia site.
+async function wikipediaFixture() {
+  await context.route('https://en.wikipedia.org/**', route => route.fulfill({
+    contentType: 'text/html', body: `<!doctype html><title>Wikipedia fixture</title><h1>Article</h1>
+      <div id="vector-appearance"></div><textarea aria-label="Article source"></textarea>
+      <script>
+        const input = document.createElement('input');
+        input.type = 'radio'; input.name = 'skin-client-pref-skin-theme-group';
+        input.id = 'skin-client-pref-skin-theme-value-day'; input.value = 'day'; input.checked = true;
+        document.getElementById('vector-appearance').append(input);
+      </script>`,
+  }));
+  const article = await context.newPage(); await article.goto('https://en.wikipedia.org/wiki/Reading_fixture');
+  await command({ type: 'monitor', monitor: { domains: ['en.wikipedia.org'], minutes: 1, paused: false, alpha: 1 } });
+  return article;
+}
+
+test('Wikipedia script-initialized Appearance preferences do not block capture', async () => {
+  const article = await wikipediaFixture();
+  expect(await article.locator('input[type=radio]').evaluate(input => ({ checked: input.checked, defaultChecked: input.defaultChecked })))
+    .toEqual({ checked: true, defaultChecked: false });
+  await ui.bringToFront(); await command({ type: 'scan' }); await captured(article);
+  const doc = await command({ type: 'get' });
+  expect(doc.workspace.tasks).toHaveLength(1); expect(doc.monitor.bypassPageSafety).toBe(false);
+});
+
+test('Wikipedia Appearance exception preserves article edits and explains why capture was skipped', async () => {
+  const article = await wikipediaFixture();
+  await article.getByLabel('Article source').fill('Unsaved article edit');
+  await ui.bringToFront(); await command({ type: 'scan' }); await age(); await command({ type: 'scan' });
+  expect(article.isClosed()).toBe(false);
+  const doc = await command({ type: 'get' });
+  expect(doc.workspace.tasks).toHaveLength(0);
+  expect(Object.values(doc.candidates)[0].skipReason).toBe('edited-form');
+  await ui.getByText('Tab attraction settings', { exact: true }).click();
+  await expect(ui.locator('#capture-status')).toContainText('Form controls differ from their defaults.');
+  await expect(article.getByLabel('Article source')).toHaveValue('Unsaved article edit');
+});
+
+test('explicit bypass captures editors and frames, and directly closes without native unload warnings', async () => {
+  const monitor = { domains: ['127.0.0.1'], minutes: 1, paused: false, alpha: 1, bypassPageSafety: false };
+  await command({ type: 'monitor', monitor });
+  const edited = await context.newPage(); await edited.goto(`${origin}/edited`);
+  await edited.getByLabel('Notes').fill('Unsaved draft');
+  await edited.evaluate(() => {
+    const frame = document.createElement('iframe'); frame.src = 'about:blank'; document.body.append(frame);
+    const editor = document.createElement('div'); editor.contentEditable = 'true'; editor.textContent = 'Draft'; document.body.append(editor);
+  });
+  await ui.bringToFront(); await command({ type: 'scan' }); await age(); await command({ type: 'scan' });
+  expect(edited.isClosed()).toBe(false);
+  expect(Object.values((await command({ type: 'get' })).candidates)[0].skipReason).toBe('frames');
+  const warned = await context.newPage(); await warned.goto(`${origin}/warn`); await warned.getByRole('button').click();
+  await ui.bringToFront(); await command({ type: 'scan' });
+  await age();
+  // The default-mode native unload behavior is covered separately above.
+  await command({ type: 'monitor', monitor: { ...monitor, bypassPageSafety: true } });
+  let warnings = 0;
+  warned.on('dialog', dialog => { warnings++; return dialog.dismiss(); });
+  await command({ type: 'scan' });
+  await expect.poll(() => edited.isClosed() && warned.isClosed()).toBe(true);
+  expect(warnings).toBe(0);
+  const doc = await command({ type: 'get' });
+  expect(doc.workspace.tasks).toHaveLength(2); expect(doc.recent).toHaveLength(2);
+  expect(doc.workspace.tasks.every(task => !task.capturePending)).toBe(true);
 });

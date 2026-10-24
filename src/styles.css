@@ -372,3 +372,5 @@ dialog .button { width: 100%; margin-top: 12px; }
 .monitor-panel h3 { margin-top: 24px; font-size: 15px; }
 #recent-tabs { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; margin-top: 12px; }
 #recent-tabs button { text-align: left; overflow-wrap: anywhere; }
+#capture-status p { overflow-wrap: anywhere; }
+

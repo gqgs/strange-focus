@@ -2,11 +2,11 @@ import { createState, addTask, equivalentUrl } from '../src/model.js';
 import { isValidState } from '../src/storage.js';
 export const KEY = 'strange-focus:extension:v2';
 export function initial() {
-  return { version: 2, workspace: createState(), candidates: {}, recent: [], monitor: { domains: [], minutes: 60, paused: true, alpha: 1 } };
+  return { version: 2, workspace: createState(), candidates: {}, recent: [], monitor: { domains: [], minutes: 60, paused: true, alpha: 1, bypassPageSafety: false } };
 }
 export function validate(doc) {
   if (!doc || doc.version !== 2 || !isValidState(doc.workspace) || !doc.candidates || typeof doc.candidates !== 'object' || Array.isArray(doc.candidates) || !Array.isArray(doc.recent)) throw new Error('Extension data could not be read. It has been preserved.');
-  validateMonitor(doc.monitor);
+  doc.monitor = validateMonitor(doc.monitor);
   for (const candidate of Object.values(doc.candidates)) {
     if (!candidate || !Number.isInteger(candidate.tabId) || !Number.isFinite(candidate.lastActive) || !Number.isFinite(candidate.observedAt)) throw new Error('Invalid saved candidate; data preserved.');
     equivalentUrl(candidate.url);
@@ -15,7 +15,9 @@ export function validate(doc) {
 }
 export function validateMonitor(value) {
   if (!value || !Array.isArray(value.domains) || value.domains.some(domain => typeof domain !== 'string' || domain !== domainName(domain)) || typeof value.paused !== 'boolean' || !Number.isFinite(value.minutes) || value.minutes < 1 || value.minutes > 10080 || !Number.isFinite(value.alpha) || value.alpha < 0 || value.alpha > 100) throw new Error('Use exact domains, 1–10080 minutes, and a priority strength from 0 to 100.');
-  return value;
+  if (value.bypassPageSafety !== undefined && typeof value.bypassPageSafety !== 'boolean') throw new Error('Page safety bypass must be on or off.');
+  // Version-2 saves made before this setting existed retain safe behavior.
+  return { ...value, bypassPageSafety: value.bypassPageSafety ?? false };
 }
 export function domainName(input) {
   const url = new URL(input.includes('://') ? input : `https://${input.trim()}`);
@@ -26,7 +28,14 @@ export const origins = domains => domains.flatMap(domain => [`http://${domain}/*
 export function monitored(tab, config) {
   try { const url = new URL(tab.url); return !tab.incognito && ['https:', 'http:'].includes(url.protocol) && config.domains.includes(url.hostname); } catch { return false; }
 }
-export function protectedTab(tab) { return tab.active || tab.pinned || tab.audible || tab.status !== 'complete' || Boolean(tab.pendingUrl); }
+export function tabProtectionReason(tab) {
+  if (tab.active) return 'active';
+  if (tab.pinned) return 'pinned';
+  if (tab.audible) return 'audible';
+  if (tab.status !== 'complete' || tab.pendingUrl) return 'loading';
+  return null;
+}
+export function protectedTab(tab) { return Boolean(tabProtectionReason(tab)); }
 export function history(task, type, now) {
   task.history ??= [];
   task.history.push({ type, at: now });
@@ -104,3 +113,4 @@ export function importWorkspace(doc, input) {
   }
   return count;
 }
+

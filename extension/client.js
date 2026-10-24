@@ -52,7 +52,10 @@ export async function mountControls(storage, announce) {
     <label for="monitor-minutes">Attract after inactivity (minutes)</label><input id="monitor-minutes" type="number" min="1" max="10080" required>
     <label for="monitor-alpha">Reopening priority strength</label><input id="monitor-alpha" type="number" min="0" max="100" step="0.1" required><p>Default 1. Set to 0 for equal chances.</p>
     <label class="check-label"><input id="monitor-paused" type="checkbox"> Pause automatic attraction</label>
+    <label class="check-label"><input id="monitor-bypass" type="checkbox" aria-describedby="monitor-bypass-warning"> Bypass page-safety checks for all monitored sites</label>
+    <p id="monitor-bypass-warning">Off by default. When enabled, pages with edited forms, editors, or embedded content close directly without unload warnings. Unsaved progress can be lost. Domain opt-in, inactivity, active/pinned/audible/loading tab protection, and saving tasks before closing still apply.</p>
     <button class="button primary" type="submit">Save monitoring settings</button><p id="monitor-message" role="status"></p></form>
+    <h3>Current tab status</h3><p>Why observed tabs are waiting or being kept open. Updates after each check; showing up to 50 tabs.</p><div id="capture-status"></div>
     <h3>Recently attracted</h3><div id="recent-tabs"></div>
     <h3>Import existing tasks</h3><p>Use Export data in the web app, then select its JSON file here. Existing tasks and colors are kept. Settings are imported only into an empty collection.</p><label for="import-data">Choose a Strange Focus export</label><input id="import-data" type="file" accept="application/json,.json">
   </details>`;
@@ -62,8 +65,27 @@ export async function mountControls(storage, announce) {
   $('monitor-minutes').value = doc.monitor.minutes;
   $('monitor-alpha').value = doc.monitor.alpha;
   $('monitor-paused').checked = doc.monitor.paused;
+  $('monitor-bypass').checked = doc.monitor.bypassPageSafety;
   async function recent() {
     const doc = await storage.document();
+    const reasons = {
+      paused: 'Automatic attraction is paused.', 'not-monitored': 'Domain is not monitored.',
+      active: 'Active tab in its window.', pinned: 'Pinned tab.', audible: 'Tab is playing audio.', loading: 'Page is still loading.',
+      inactivity: 'Waiting for the inactivity threshold.', 'unload-cooldown': 'Waiting after an interrupted unload; retries after one hour.',
+      completed: 'This task is already completed.', 'focus-session': 'Task is in the current focus session.',
+      checking: 'Checking page safety.', 'capture-pending': 'Task saved; waiting for the page to close or finish navigation.',
+      'page-changed': 'Page or tab activity changed during the check.', frames: 'Embedded frame detected.', editor: 'Editable content detected.',
+      'edited-form': 'Form controls differ from their defaults.', 'safety-check': 'Page safety could not be verified.',
+      'site-access': 'Site access is unavailable, or the page could not be inspected.',
+    };
+    $('capture-status').replaceChildren();
+    const candidates = Object.values(doc.candidates).slice(0, 50);
+    for (const candidate of candidates) {
+      const row = document.createElement('p');
+      row.textContent = `${candidate.title || candidate.url}: ${reasons[candidate.skipReason] || 'Waiting for the next check.'}`;
+      $('capture-status').append(row);
+    }
+    if (!candidates.length) $('capture-status').textContent = 'No observed tabs waiting.';
     $('recent-tabs').replaceChildren();
     for (const entry of doc.recent) {
       const task = doc.workspace.tasks.find(task => task.id === entry.taskId);
@@ -77,13 +99,16 @@ export async function mountControls(storage, announce) {
   }
   await recent();
   root.querySelector('details').addEventListener('toggle', () => { if (root.querySelector('details').open) recent().catch(error => announce(error.message)); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[KEY] && root.querySelector('details').open) recent().catch(error => announce(error.message));
+  });
   $('monitor-form').addEventListener('submit', async event => {
     event.preventDefault();
     try {
       const domains = [...new Set($('monitor-domains').value.split(/[\s,]+/).filter(Boolean).map(domainName))];
       // Request optional access directly from the user gesture.
       if (domains.length && !await chrome.permissions.request({ origins: origins(domains) })) throw new Error('Site access was not granted. Monitoring settings were not changed.');
-      await request({ type: 'monitor', monitor: { domains, minutes: Number($('monitor-minutes').value), alpha: Number($('monitor-alpha').value), paused: $('monitor-paused').checked } });
+      await request({ type: 'monitor', monitor: { domains, minutes: Number($('monitor-minutes').value), alpha: Number($('monitor-alpha').value), paused: $('monitor-paused').checked, bypassPageSafety: $('monitor-bypass').checked } });
       $('monitor-message').textContent = 'Saved. Checks run every minute.';
       await request({ type: 'scan' });
       await recent();
@@ -99,3 +124,4 @@ export async function mountControls(storage, announce) {
     $('import-data').value = '';
   });
 }
+
