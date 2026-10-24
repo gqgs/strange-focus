@@ -2,6 +2,12 @@ import { initial, validate, validateMonitor, monitored, protectedTab, tabProtect
 import { equivalentUrl, isSessionActive } from '../src/model.js';
 import { safeToLeave } from './safety.js';
 
+// A bypass capture may resume after a discard succeeded but removal failed.
+// Discarded is not loading; never relax active/pinned/audible/pending-URL guards.
+const captureProtectionReason = (tab, monitor) => tabProtectionReason(
+  monitor.bypassPageSafety && tab.discarded && tab.status === 'unloaded' ? { ...tab, status: 'complete' } : tab,
+);
+
 export class Engine {
   constructor(api) { this.api = api; }
   async load() { const saved = (await this.api.storage.local.get(KEY))[KEY]; return saved === undefined ? initial() : validate(saved); }
@@ -78,7 +84,7 @@ export class Engine {
       const existing = doc.workspace.tasks.find(task => equivalentUrl(task.url) === equivalentUrl(candidate.url));
       candidate.skipReason = doc.monitor.paused ? 'paused'
         : !tab ? 'page-changed'
-        : tabProtectionReason(tab) || (candidate.gate ? 'capture-pending'
+        : captureProtectionReason(tab, doc.monitor) || (candidate.gate ? 'capture-pending'
           : !monitored(tab, doc.monitor) ? 'not-monitored'
           : now - candidate.lastActive < doc.monitor.minutes * 60000 ? 'inactivity'
           : !doc.monitor.bypassPageSafety && candidate.blockedAt && now - candidate.blockedAt < 3600000 ? 'unload-cooldown'
@@ -109,7 +115,7 @@ export class Engine {
       } catch { skip(candidate, 'site-access'); continue; } // No host access or page disappeared: keep it.
       try {
         const fresh = await this.api.tabs.get(tab.id);
-        if (fresh.url !== candidate.url || protectedTab(fresh)) { skip(candidate, 'page-changed'); continue; }
+        if (fresh.url !== candidate.url || captureProtectionReason(fresh, doc.monitor)) { skip(candidate, 'page-changed'); continue; }
         const task = attract(doc, candidate, now);
         if (!task) continue;
         if (!doc.monitor.bypassPageSafety) candidate.gate = this.api.runtime.getURL(`extension/parked.html#${crypto.randomUUID()}`);
@@ -120,10 +126,18 @@ export class Engine {
         // In safe mode navigation lets Chromium run beforeunload. Never
         // accept/dismiss a prompt. Explicit bypass instead closes directly.
         const beforeNavigation = await this.api.tabs.get(tab.id);
-        if (beforeNavigation.url !== candidate.url || protectedTab(beforeNavigation)) { skip(candidate, 'page-changed'); continue; }
+        if (beforeNavigation.url !== candidate.url || captureProtectionReason(beforeNavigation, doc.monitor)) { skip(candidate, 'page-changed'); continue; }
         if (doc.monitor.bypassPageSafety) {
-          // Explicit opt-out: close directly, bypassing native unload warnings.
-          // The task is durable before this call, including if removal fails.
+          // Removing a live page can still wait for beforeunload. The explicit
+          // opt-out discards its document first, only after the task is durable.
+          // Chrome refuses to discard an active tab; recheck again before close.
+          try {
+            if (!beforeNavigation.discarded) await this.api.tabs.discard(tab.id);
+          } catch { skip(candidate, 'discard-failed'); continue; }
+          const beforeClose = await this.api.tabs.get(tab.id);
+          if (!beforeClose.discarded || beforeClose.url !== candidate.url || beforeClose.active || beforeClose.pinned || beforeClose.audible || beforeClose.pendingUrl) {
+            skip(candidate, 'page-changed'); continue;
+          }
           await this.api.tabs.remove(tab.id);
           delete task.capturePending;
           delete doc.candidates[tab.id];
