@@ -277,3 +277,36 @@ test('bypass leaves the saved task and tab if discard fails or the tab changes a
     assert.equal(f.saved().candidates[1].skipReason, change === 'discard-failure' ? 'discard-failed' : 'page-changed');
   }
 });
+
+test('bypass follows a replacement tab ID returned by Chromium discard', async () => {
+  const f = fixture(); f.saved().monitor.bypassPageSafety = true;
+  f.api.tabs.discard = async id => {
+    f.actions.push('discard');
+    const replacement = { ...f.tabs.get(id), id: 99, discarded: true, status: 'unloaded' };
+    f.tabs.delete(id); f.tabs.set(99, replacement); return replacement;
+  };
+  const remove = f.api.tabs.remove;
+  f.api.tabs.remove = async id => {
+    assert.equal(id, 99);
+    assert.equal(f.saved().candidates[99].tabId, 99);
+    assert.equal(f.saved().candidates[1], undefined);
+    return remove(id);
+  };
+  await f.engine.scan();
+  assert.deepEqual(f.actions, ['save', 'save', 'discard', 'save', 'remove', 'save']);
+  assert.equal(f.tabs.size, 0); assert.equal(f.saved().workspace.tasks.length, 1);
+});
+
+test('failed replacement-ID receipt write never removes the new tab and recovers by URL', async () => {
+  const f = fixture(); f.saved().monitor.bypassPageSafety = true;
+  f.api.tabs.discard = async id => {
+    const replacement = { ...f.tabs.get(id), id: 99, discarded: true, status: 'unloaded' };
+    f.tabs.delete(id); f.tabs.set(99, replacement); return replacement;
+  };
+  const save = f.api.storage.local.set; let writes = 0;
+  f.api.storage.local.set = async value => { if (++writes === 3) throw Error('receipt failed'); return save(value); };
+  await assert.rejects(f.engine.scan(), /receipt failed/);
+  assert.equal(f.tabs.size, 1); assert.ok(!f.actions.includes('remove'));
+  await new Engine(f.api).scan();
+  assert.equal(f.tabs.size, 0); assert.equal(f.saved().workspace.tasks.length, 1);
+});
