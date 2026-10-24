@@ -131,16 +131,27 @@ export class Engine {
           // Removing a live page can still wait for beforeunload. The explicit
           // opt-out discards its document first, only after the task is durable.
           // Chrome refuses to discard an active tab; recheck again before close.
+          let discarded = beforeNavigation;
           try {
-            if (!beforeNavigation.discarded) await this.api.tabs.discard(tab.id);
+            if (!discarded.discarded) discarded = await this.api.tabs.discard(tab.id);
           } catch { skip(candidate, 'discard-failed'); continue; }
-          const beforeClose = await this.api.tabs.get(tab.id);
+          if (!discarded || !Number.isInteger(discarded.id)) { skip(candidate, 'discard-failed'); continue; }
+          if (!discarded.discarded) { skip(candidate, 'page-changed'); continue; }
+          // Some Chromium versions replace the tab's WebContents and ID on
+          // discard. Persist that identity before attempting to remove it.
+          if (discarded.id !== candidate.tabId) {
+            delete doc.candidates[candidate.tabId];
+            candidate.tabId = discarded.id;
+            doc.candidates[candidate.tabId] = candidate;
+            await this.save(doc);
+          }
+          const beforeClose = await this.api.tabs.get(candidate.tabId);
           if (!beforeClose.discarded || beforeClose.url !== candidate.url || beforeClose.active || beforeClose.pinned || beforeClose.audible || beforeClose.pendingUrl) {
             skip(candidate, 'page-changed'); continue;
           }
-          await this.api.tabs.remove(tab.id);
+          await this.api.tabs.remove(candidate.tabId);
           delete task.capturePending;
-          delete doc.candidates[tab.id];
+          delete doc.candidates[candidate.tabId];
           doc.recent = [{ taskId: task.id, at: now }, ...doc.recent.filter(item => item.taskId !== task.id)].slice(0, 50);
           await this.save(doc);
         } else await this.api.tabs.update(tab.id, { url: candidate.gate });
